@@ -113,7 +113,7 @@ async function requiresLauncher(gamePath: string, store?: string) {
       launcher: 'xbox',
       addInfo: {
         appId: XBOX_ID,
-        parameters: [{ appExecName: 'Game' }],
+        parameters: [{ appExecName: 'AppPalShipping' }],
       },
     });
   } else {
