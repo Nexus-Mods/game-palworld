@@ -67,7 +67,7 @@ function main(context: types.IExtensionContext) {
       supportsSymlinks: true,
       steamAppId: parseInt(STEAMAPP_ID),
       stopPatterns: getStopPatterns(),
-      ignoreDeploy: IGNORE_DEPLOY,
+      //ignoreDeploy: IGNORE_DEPLOY,
       ignoreConflicts: IGNORE_CONFLICTS
     },
   });
