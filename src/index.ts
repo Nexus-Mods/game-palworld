@@ -4,7 +4,11 @@ import path from 'path';
 
 import { actions, fs, types, selectors, util } from 'vortex-api';
 
-import { EXECUTABLE, GAME_ID, IGNORE_CONFLICTS, IGNORE_DEPLOY, MODSFOLDER_PATH, STEAMAPP_ID, STOP_PATTERNS, XBOX_ID } from './common';
+import { EXECUTABLE, GAME_ID, IGNORE_CONFLICTS, IGNORE_DEPLOY,
+  PAK_MODSFOLDER_PATH, STEAMAPP_ID, STOP_PATTERNS, XBOX_ID } from './common';
+import { installUE4SSInjector, testUE4SSInjector } from './installers';
+
+import { resolveUE4SSPath } from './util';
 
 const supportedTools: types.ITool[] = [];
 
@@ -21,7 +25,7 @@ function main(context: types.IExtensionContext) {
     name: 'Palworld',
     mergeMods: true,
     queryArgs: gameFinderQuery,
-    queryModPath: () => MODSFOLDER_PATH,
+    queryModPath: () => '.',
     logo: 'gameart.jpg',
     executable: () => EXECUTABLE,
     requiredFiles: [EXECUTABLE],
@@ -36,6 +40,11 @@ function main(context: types.IExtensionContext) {
       ignoreConflicts: IGNORE_CONFLICTS
     },
   });
+
+  const isPalWorld = (gameId: string) => GAME_ID === gameId;
+
+  context.registerInstaller('palworld-ue4ss', 10, testUE4SSInjector as any,
+    (files, destinationPath, gameId) => installUE4SSInjector(context.api, files, destinationPath, gameId) as any);
 
   context.once(() => {
     //context.api.setStylesheet('starfield', path.join(__dirname, 'starfield.scss'));
@@ -56,8 +65,9 @@ async function setup(api: types.IExtensionApi, discovery: types.IDiscoveryResult
 
   if (!discovery || !discovery.path) return;
 
-  // Make sure the folder exists
-  await fs.ensureDirWritableAsync(path.join(discovery.path, MODSFOLDER_PATH));
+  // Make sure the folders exist
+  const ensurePath = (filePath: string) => fs.ensureDirWritableAsync(path.join(discovery.path, filePath));
+  await Promise.all([resolveUE4SSPath(api), PAK_MODSFOLDER_PATH].map(ensurePath));
 }
 
 
@@ -92,7 +102,7 @@ async function onDidPurgeEvent(api: types.IExtensionApi, profileId: string): Pro
 
 async function onWillDeployEvent(api: types.IExtensionApi, profileId: any, deployment: types.IDeploymentManifest): Promise<void> {
 
-  const state = api.getState();;
+  const state = api.getState();
   const profile = selectors.activeProfile(state);
 
   if (profile?.gameId !== GAME_ID) {
