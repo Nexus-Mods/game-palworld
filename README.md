@@ -61,7 +61,7 @@ If a LUA mod is detected, it's deployment folder is `\Pal\Binaries\Win64\Mods`.
 
 LUA mods are only detected by UE4SS if they contain an `enabled.txt` file in the mods root folder. For example, if `\Pal\Binaries\Win64\Mods\<MODFOLDER>\enabled.txt` doesn't exist, then it won't be loaded by UE4SS. Vortex does create this file if it doesn't exist during mod deployment.
 
-> Lua mods can also be detected by UE4SS if it has an entry in it's `\Pal\Binaries\Win64\Mods\mods.txt` file but it's more complicated for Vortex to manage this file and so the existance of `enabled.txt` is the better solution.
+> Lua mods can also be detected by UE4SS if it has an entry in it's `\Pal\Binaries\Win64\Mods\mods.txt` file but it's more complicated for Vortex to manage this file and so the existence of `enabled.txt` is the better solution.
 
 # See also
 

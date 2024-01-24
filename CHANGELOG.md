@@ -6,4 +6,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [0.1.0] - 2024-01-23
 
-- Initial release for basic mod support
+- Initial version
+- Supports Steam and Game Pass
+- Supports Pak and Lua\UE4SS mods
+- Auto downloads and installs UE4SS
