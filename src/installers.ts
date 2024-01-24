@@ -35,7 +35,10 @@ export async function installUE4SSInjector(api: types.IExtensionApi, files: stri
     }
     return accum;
   }, [])
-
+  instructions.push({
+    type: 'setmodtype',
+    value: '',
+  })
   return { instructions };
 }
 //#endregion

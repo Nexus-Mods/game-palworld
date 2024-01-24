@@ -2,6 +2,8 @@ import path from 'path';
 import { selectors, types } from 'vortex-api';
 import { PAK_MODSFOLDER_PATH, PAK_EXTENSIONS, IGNORE_CONFLICTS, LUA_EXTENSIONS } from './common';
 import { resolveUE4SSPath } from './util';
+
+const hasModTypeInstruction = (instructions: types.IInstruction[]) => instructions.find(instr => instr.type === 'setmodtype');
 //#region MOD_TYPE_PAK
 export function getPakPath(api: types.IExtensionApi, game: types.IGame) {
   const discovery = selectors.discoveryByGame(api.getState(), game.id);
@@ -14,6 +16,9 @@ export function getPakPath(api: types.IExtensionApi, game: types.IGame) {
 
 export function testPakPath(instructions: types.IInstruction[]): Promise<boolean> {
   // Pretty basic set up right now.
+  if (hasModTypeInstruction(instructions)) {
+    return Promise.resolve(false);
+  }
   const filteredPaks = instructions
     .filter((inst: types.IInstruction) => (inst.type === 'copy')
       && (PAK_EXTENSIONS.includes(path.extname(inst.source as any))));
@@ -44,6 +49,9 @@ export function getLUAPath(api: types.IExtensionApi, game: types.IGame) {
 }
 
 export function testLUAPath(instructions: types.IInstruction[]): Promise<boolean> {
+  if (hasModTypeInstruction(instructions)) {
+    return Promise.resolve(false);
+  }
   // Pretty basic set up right now.
   const filtered = instructions
     .filter((inst: types.IInstruction) => (inst.type === 'copy')
