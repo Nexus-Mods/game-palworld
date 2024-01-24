@@ -64,7 +64,7 @@ function main(context: types.IExtensionContext) {
     supportedTools,
     requiresLauncher: requiresLauncher as any,
     details: {
-      supportsSymlinks: false,
+      supportsSymlinks: true,
       steamAppId: parseInt(STEAMAPP_ID),
       stopPatterns: getStopPatterns(),
       ignoreDeploy: IGNORE_DEPLOY,
@@ -114,7 +114,9 @@ async function setup(api: types.IExtensionApi, discovery: types.IDiscoveryResult
 
   // Make sure the folders exist
   const ensurePath = (filePath: string) => fs.ensureDirWritableAsync(path.join(discovery.path, filePath));
-  await Promise.all([resolveUE4SSPath(api), PAK_MODSFOLDER_PATH].map(ensurePath));
+  const UE4SSPath = resolveUE4SSPath(api);
+  await ensurePath(path.join(UE4SSPath, 'Mods'));
+  await ensurePath(PAK_MODSFOLDER_PATH);
   await download(api, PLUGIN_REQUIREMENTS);
 }
 
