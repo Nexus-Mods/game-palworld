@@ -5,8 +5,11 @@ import path from 'path';
 import { actions, fs, types, selectors, util } from 'vortex-api';
 
 import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS, IGNORE_DEPLOY,
-  PAK_MODSFOLDER_PATH, STEAMAPP_ID, STOP_PATTERNS, XBOX_EXECUTABLE, XBOX_ID,
-  PLUGIN_REQUIREMENTS } from './common';
+  PAK_MODSFOLDER_PATH, STEAMAPP_ID, XBOX_EXECUTABLE, XBOX_ID,
+  PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA } from './common';
+
+import { getStopPatterns } from './stopPatterns';
+import { getLUAPath, getPakPath, testLUAPath, testPakPath } from './modTypes';
 import { installUE4SSInjector, testUE4SSInjector } from './installers';
 
 import { resolveUE4SSPath } from './util';
@@ -63,16 +66,32 @@ function main(context: types.IExtensionContext) {
     details: {
       supportsSymlinks: false,
       steamAppId: parseInt(STEAMAPP_ID),
-      stopPatterns: STOP_PATTERNS,
+      stopPatterns: getStopPatterns(),
       ignoreDeploy: IGNORE_DEPLOY,
       ignoreConflicts: IGNORE_CONFLICTS
     },
   });
 
-  const isPalWorld = (gameId: string) => GAME_ID === gameId;
-
   context.registerInstaller('palworld-ue4ss', 10, testUE4SSInjector as any,
     (files, destinationPath, gameId) => installUE4SSInjector(context.api, files, destinationPath, gameId) as any);
+  
+  context.registerModType(
+    MOD_TYPE_PAK,
+    10,
+    (gameId) => GAME_ID === gameId,
+    (game: types.IGame) => getPakPath(context.api, game),
+    testPakPath as any,
+    { deploymentEssential: true, name: 'Pak Mod' }
+  );
+
+  context.registerModType(
+    MOD_TYPE_LUA,
+    10,
+    (gameId) => GAME_ID === gameId,
+    (game: types.IGame) => getLUAPath(context.api, game),
+    testLUAPath as any,
+    { deploymentEssential: true, name: 'LUA Mod', mergeMods: (mod: types.IMod) => mod.id }
+  );
 
   context.once(() => {
     //context.api.setStylesheet('starfield', path.join(__dirname, 'starfield.scss'));

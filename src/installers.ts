@@ -4,6 +4,7 @@ import path from 'path';
 
 import { GAME_ID, UE4SS_FILES, UE4SS_PATH_PREFIX, XBOX_UE4SS_XINPUT_REPLACEMENT } from './common';
 
+//#region UE4SS Installer and test.
 export async function testUE4SSInjector(files: string[], gameId: string): Promise<types.ISupportedResult> {
   const supported = gameId === GAME_ID && files.some(file => UE4SS_FILES.includes(file));
   return { supported, requiredFiles: UE4SS_FILES };
@@ -37,3 +38,4 @@ export async function installUE4SSInjector(api: types.IExtensionApi, files: stri
 
   return { instructions };
 }
+//#endregion
