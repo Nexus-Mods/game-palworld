@@ -12,7 +12,7 @@ export const XBOX_ID = 'PocketpairInc.Palworld';
 export const STEAMAPP_ID = '1623730';
 
 export const UE4SS_PATH_PREFIX = path.join('Pal', 'Binaries');
-export const PAK_MODSFOLDER_PATH = path.join('Pal', 'Content', 'Paks'); // relative to game root
+export const PAK_MODSFOLDER_PATH = path.join('Pal', 'Content', 'Paks', '~mods'); // relative to game root
 
 export const LUA_EXTENSIONS = ['.lua'];
 export const PAK_EXTENSIONS = ['.pak', '.utoc', '.ucas'];

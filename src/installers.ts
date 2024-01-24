@@ -23,11 +23,11 @@ export async function installUE4SSInjector(api: types.IExtensionApi, files: stri
     if (path.extname(segments[segments.length - 1]) !== '') {
       // Apparently xinput1_3 isn't being loaded by the xbox gamepass version.
       //  we rename the file to xinput1_4
-      const destination = iter === UE4SS_FILES[0]
+      const destination = gameStore === 'xbox' && iter === UE4SS_FILES[0]
         ? path.join(targetPath, XBOX_UE4SS_XINPUT_REPLACEMENT)
         : path.join(targetPath, iter);
 
-      if (iter === UE4SS_FILES[1]) {
+      if (gameStore === 'xbox' && iter === UE4SS_FILES[1]) {
         const data: string = await fs.readFileAsync(path.join(destinationPath, iter), { encoding: 'utf8' });
         const newData = data.replace(/bUseUObjectArrayCache = true/gm, 'bUseUObjectArrayCache = false');
         const createInstr: types.IInstruction = {
