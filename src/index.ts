@@ -94,7 +94,25 @@ function main(context: types.IExtensionContext) {
   );
 
   context.once(() => {
-    //context.api.setStylesheet('starfield', path.join(__dirname, 'starfield.scss'));
+    context.api.events.on('did-install-mod', async (gameId, archiveId, modId) => {
+      if (gameId !== GAME_ID) {
+        return;
+      }
+
+      const state = context.api.getState();
+      const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', gameId], {});
+      const mod = mods?.[modId];
+      if (mod.type !== MOD_TYPE_LUA) {
+        return;
+      }
+
+      const installPath = selectors.installPathForGame(state, GAME_ID);
+      const modPath = path.join(installPath, mod.installationPath);
+      const exists = await fs.statAsync(path.join(modPath, 'Enabled.txt')).then(() => true).catch(() => false);
+      if (!exists) {
+        await fs.writeFileAsync(path.join(modPath, 'Enabled.txt'), '', { encoding: 'utf8' });
+      }
+    })
     context.api.events.on('gamemode-activated', () => onGameModeActivated(context.api));
     context.api.onAsync('will-deploy', (profileId: string, deployment: types.IDeploymentManifest) => onWillDeployEvent(context.api, profileId, deployment));
     context.api.onAsync('did-deploy', (profileId: string, deployment: types.IDeploymentManifest) => onDidDeployEvent(context.api, profileId, deployment));
