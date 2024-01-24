@@ -19,13 +19,16 @@ Coming Soon
 
 # Features
 
-- 
+- Downloads and installs UE4SS if it doesn't exist
+- Automatic game detection
+- Support for PAK mods
+- Support for Lua\UE4SS mods
 
 # Installation
 
 This extension requires Vortex **1.9.10** or greater.
 
-To install, click the Vortex button at the top of the [Palworld Extension page on Nexus Mods](https://www.nexusmods.com/site/mods/xxx), and then click Install.
+To install, click the Vortex button at the top of the [Palworld Extension page on Nexus Mods](https://www.nexusmods.com/site/mods/770), and then click Install.
 
 You can also manually install it by click the Manual button at the top of the page and dragging it into the drop target labelled Drop File(s) in the Extensions page at the bottom right.
 
@@ -43,28 +46,33 @@ It is also possible to manually set the game folder if the auto detection doesn'
 
 If your game lacks this file then it is likely that your installation has become corrupted somehow.
 
-## Important note if managing the game through xbox game pass:
-
-Currently the game discovery will resolve to the game's default `WindowsApps` location - Vortex's access to this directory is very limited due to the game store locking the files in a system owned virtual file system. As a workaround, please install the game into an external location, e.g. `C:/XboxGames/` and manually set the game folder inside Vortex to the `C:\XboxGames\Palworld` folder. You should then be able to create the folder junction and mod your game.
-
 # Mod Management
 
-By default, Vortex will deploy files to the game's `/Pal/content/Pak` folder and extracts the archive while preserving the folder structure.
+By default, Vortex will deploy files to the game's root folder and extracts the archive while preserving it's folder structure.
 
-# Known Issues
+## PAK mods
 
-- 
+If a PAK mod is detected, it's deployment folder is `\Pal\Content\Paks\~mods`.
+
+## Lua\UE4SS mods
+
+If a LUA mod is detected, it's deployment folder is `\Pal\Binaries\Win64\Mods`.
+
+
+LUA mods are only detected by UE4SS if they contain an `enabled.txt` file in the mods root folder. For example, if `\Pal\Binaries\Win64\Mods\<MODFOLDER>\enabled.txt` doesn't exist, then it won't be loaded by UE4SS. Vortex does create this file if it doesn't exist during mod deployment.
+
+> Lua mods can also be detected by UE4SS if it has an entry in it's `\Pal\Binaries\Win64\Mods\mods.txt` file but it's more complicated for Vortex to manage this file and so the existance of `enabled.txt` is the better solution.
 
 # See also
 
-- [Download the Extension (Nexus Mods)](https://www.nexusmods.com/site/mods/xxx)
+- [Download the Extension (Nexus Mods)](https://www.nexusmods.com/site/mods/770)
 - [Mods for Palworld (Nexus Mods)](https://www.nexusmods.com/palworld)
 - [Vortex Forum (Nexus Mods)](https://forums.nexusmods.com/index.php?/forum/4306-vortex-support/)
 - [Download Vortex (Nexus Mods)](https://www.nexusmods.com/about/vortex/)
 
 # Thanks
 
-- 
+To all those that work on [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS), you are doing an epic job.
 
 # Changelog
 
