@@ -4,11 +4,13 @@ import path from 'path';
 
 import { actions, fs, types, selectors, util } from 'vortex-api';
 
-import { EXECUTABLE, GAME_ID, IGNORE_CONFLICTS, IGNORE_DEPLOY,
-  PAK_MODSFOLDER_PATH, STEAMAPP_ID, STOP_PATTERNS, XBOX_ID } from './common';
+import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS, IGNORE_DEPLOY,
+  PAK_MODSFOLDER_PATH, STEAMAPP_ID, STOP_PATTERNS, XBOX_EXECUTABLE, XBOX_ID,
+  PLUGIN_REQUIREMENTS } from './common';
 import { installUE4SSInjector, testUE4SSInjector } from './installers';
 
 import { resolveUE4SSPath } from './util';
+import { download } from './downloader';
 
 const supportedTools: types.ITool[] = [];
 
@@ -17,8 +19,34 @@ const gameFinderQuery = {
   xbox: [{ id: XBOX_ID }],
 };
 
-function main(context: types.IExtensionContext) {
+const requiredFiles = [];
+function getExecutable(discoveryPath) {
+  const isCorrectExec = (exec) => {
+    try {
+      fs.statSync(path.join(discoveryPath, exec));
+      requiredFiles.push(exec);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  };
 
+  if (discoveryPath === undefined) {
+    return DEFAULT_EXECUTABLE;
+  }
+
+  if (isCorrectExec(XBOX_EXECUTABLE)) {
+    return XBOX_EXECUTABLE;
+  }
+
+  if (isCorrectExec(DEFAULT_EXECUTABLE)) {
+    return DEFAULT_EXECUTABLE;
+  }
+
+  return DEFAULT_EXECUTABLE;
+}
+
+function main(context: types.IExtensionContext) {
   // register a whole game, basic metadata and folder paths
   context.registerGame({
     id: GAME_ID,
@@ -27,8 +55,8 @@ function main(context: types.IExtensionContext) {
     queryArgs: gameFinderQuery,
     queryModPath: () => '.',
     logo: 'gameart.jpg',
-    executable: () => EXECUTABLE,
-    requiredFiles: [EXECUTABLE],
+    executable: getExecutable,
+    requiredFiles,
     setup: (discovery) => setup(context.api, discovery) as any,
     supportedTools,
     requiresLauncher: requiresLauncher as any,
@@ -68,6 +96,7 @@ async function setup(api: types.IExtensionApi, discovery: types.IDiscoveryResult
   // Make sure the folders exist
   const ensurePath = (filePath: string) => fs.ensureDirWritableAsync(path.join(discovery.path, filePath));
   await Promise.all([resolveUE4SSPath(api), PAK_MODSFOLDER_PATH].map(ensurePath));
+  await download(api, PLUGIN_REQUIREMENTS);
 }
 
 

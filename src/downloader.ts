@@ -9,9 +9,9 @@ import { GAME_ID } from './common';
 import { IPluginRequirement, IGithubDownload } from './types';
 
 export async function download(api: types.IExtensionApi, requirements: IPluginRequirement[]) {
-  api!.sendNotification({
-    id: 'plugins-enabler-installing',
-    message: 'Installing plugin enabler',
+  api.sendNotification({
+    id: 'ue4ss-download-notification',
+    message: 'Installing UE4SS',
     type: 'activity',
     noDismiss: true,
     allowSuppress: false,
@@ -23,7 +23,7 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
     for (const req of requirements) {
       const mod = await req.findMod(api);
       if (mod?.id !== undefined) {
-        batchActions.push(actions.setModEnabled(profileId, mod.id, true) as Action<any>);
+        batchActions.push(actions.setModEnabled(profileId, mod.id, true));
         continue;
       }
       if (req?.modId !== undefined) {
@@ -41,7 +41,7 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
     if (batchActions.length > 0) {
       util.batchDispatch(api.store, batchActions);
     }
-    api.dismissNotification('plugins-enabler-installing');
+    api.dismissNotification('ue4ss-download-notification');
   }
 }
 
@@ -117,7 +117,7 @@ async function getLatestReleaseDownloadUrl(api: types.IExtensionApi, requirement
     if (response.status === 200) {
       const release = response.data;
       if (release.assets.length > 0) {
-        const chosenAsset = release.assets.find((asset: any) => asset.name.includes('x64'));
+        const chosenAsset = release.assets.find((asset: any) => asset.name.includes(requirement.fileName));
         return { fileName: chosenAsset.name, url: chosenAsset.browser_download_url  };
       }
     }
