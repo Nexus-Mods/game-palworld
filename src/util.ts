@@ -3,7 +3,7 @@ import path from 'path';
 import { selectors, types, util } from 'vortex-api';
 import turbowalk, { IWalkOptions, IEntry } from 'turbowalk';
 
-import { UE4SS_PATH_PREFIX, GAME_ID } from './common';
+import { UE4SS_PATH_PREFIX, GAME_ID, NOTIF_ID_BP_MODLOADER_DISABLED } from './common';
 
 export function resolveUE4SSPath(api: types.IExtensionApi): string {
   const state = api.getState();
@@ -45,4 +45,8 @@ export async function walkPath(dirPath: string, walkOptions?: IWalkOptions): Pro
     }, walkOptions).catch(err => err.code === 'ENOENT' ? Promise.resolve() : Promise.reject(err));
     return resolve(walkResults);
   });
+}
+
+export function dismissNotifications(api: types.IExtensionApi) {
+  [NOTIF_ID_BP_MODLOADER_DISABLED].forEach(id => api.dismissNotification(id));
 }

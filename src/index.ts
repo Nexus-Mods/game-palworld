@@ -4,15 +4,16 @@ import path from 'path';
 
 import { actions, fs, types, selectors, util } from 'vortex-api';
 
-import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS, IGNORE_DEPLOY,
+import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
   PAK_MODSFOLDER_PATH, STEAMAPP_ID, XBOX_EXECUTABLE, XBOX_ID,
-  PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA } from './common';
+  PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA, MOD_TYPE_BP_PAK, BPPAK_MODSFOLDER_PATH, } from './common';
 
 import { getStopPatterns } from './stopPatterns';
-import { getLUAPath, getPakPath, testLUAPath, testPakPath } from './modTypes';
+import { getBPPakPath, getLUAPath, getPakPath, testBPPakPath, testLUAPath, testPakPath } from './modTypes';
 import { installUE4SSInjector, testUE4SSInjector } from './installers';
+import { testBluePrintModManager } from './tests';
 
-import { resolveUE4SSPath } from './util';
+import { dismissNotifications, resolveUE4SSPath } from './util';
 import { download } from './downloader';
 
 const supportedTools: types.ITool[] = [];
@@ -74,7 +75,19 @@ function main(context: types.IExtensionContext) {
 
   context.registerInstaller('palworld-ue4ss', 10, testUE4SSInjector as any,
     (files, destinationPath, gameId) => installUE4SSInjector(context.api, files, destinationPath, gameId) as any);
-  
+
+  // BP_PAK modType must have a lower priority than regular PAKs
+  //  this ensures that we get a chance to detect the LogicMods folder
+  //  structure before we just deploy it to ~mods
+  context.registerModType(
+    MOD_TYPE_BP_PAK,
+    5,
+    (gameId) => GAME_ID === gameId,
+    (game: types.IGame) => getBPPakPath(context.api, game),
+    testBPPakPath as any,
+    { deploymentEssential: true, name: 'Blueprint Mod' }
+  );
+
   context.registerModType(
     MOD_TYPE_PAK,
     10,
@@ -135,6 +148,7 @@ async function setup(api: types.IExtensionApi, discovery: types.IDiscoveryResult
   const UE4SSPath = resolveUE4SSPath(api);
   await ensurePath(path.join(UE4SSPath, 'Mods'));
   await ensurePath(PAK_MODSFOLDER_PATH);
+  await ensurePath(BPPAK_MODSFOLDER_PATH);
   await download(api, PLUGIN_REQUIREMENTS);
 }
 
@@ -142,12 +156,19 @@ async function setup(api: types.IExtensionApi, discovery: types.IDiscoveryResult
 async function onGameModeActivated(api: types.IExtensionApi) {
   const state = api.getState();
   const activeGameId = selectors.activeGameId(state);
-
   if (activeGameId !== GAME_ID) {
-    //dismissNotifications(api);
+    dismissNotifications(api);
+    return;
   }
 
-  return;
+  try {
+    await testBluePrintModManager(api, 'gamemode-activated');
+  } catch (err) {
+    // All errors should've been handled in the test - if this
+    //  notification is reported - please fix the test.
+    api.showErrorNotification('BPModManager is disabled', err);
+    return;
+  }
 }
 
 async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, deployment: types.IDeploymentManifest): Promise<void> {
@@ -156,6 +177,8 @@ async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, dep
   if (gameId !== GAME_ID) {
     return Promise.resolve();
   }
+
+  await testBluePrintModManager(api, 'did-deploy');
 
   return Promise.resolve();
 }

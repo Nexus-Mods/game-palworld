@@ -1,8 +1,7 @@
-import { types } from "vortex-api";
-import { IMod } from "vortex-api/lib/types/IState";
+import { types } from 'vortex-api';
 
-export type LockedState = "true" | "false" | "always" | "never";
 export type LoadOrder = ILoadOrderEntry[];
+export type EventType = 'did-deploy' | 'gamemode-activated';
 
 export interface IGithubDownload {
   fileName: string;

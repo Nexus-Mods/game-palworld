@@ -1,14 +1,13 @@
 /* eslint-disable */
 
 import path from 'path';
-import { Action } from 'redux-act';
-import { actions, fs, selectors, types, util } from 'vortex-api';
+import { actions, fs, log, selectors, types, util } from 'vortex-api';
 import axios from 'axios';
 
 import { GAME_ID } from './common';
 import { IPluginRequirement, IGithubDownload } from './types';
 
-export async function download(api: types.IExtensionApi, requirements: IPluginRequirement[]) {
+export async function download(api: types.IExtensionApi, requirements: IPluginRequirement[], force?: boolean) {
   api.sendNotification({
     id: 'ue4ss-download-notification',
     message: 'Installing UE4SS',
@@ -22,8 +21,9 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
   try {
     for (const req of requirements) {
       const mod = await req.findMod(api);
-      if (mod?.id !== undefined) {
+      if (force !== true && mod?.id !== undefined) {
         batchActions.push(actions.setModEnabled(profileId, mod.id, true));
+        batchActions.push(actions.setModAttribute(GAME_ID, mod.id, 'customFileName', req.userFacingName));
         continue;
       }
       if (req?.modId !== undefined) {
@@ -32,11 +32,13 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
         const asset = await getLatestReleaseDownloadUrl(api, req);
         const tempPath = path.join(util.getVortexPath('temp'), asset.fileName);
         await doDownload(asset.url, tempPath);
-        await importAndInstall(api, tempPath);
+        await importAndInstall(api, tempPath, req.userFacingName);
       }
     }
   } catch (err) {
     // Fallback here.
+    log('error', 'failed to download ue4ss', err);
+    return;
   } finally {
     if (batchActions.length > 0) {
       util.batchDispatch(api.store, batchActions);
@@ -45,30 +47,33 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
   }
 }
 
-async function importAndInstall(api: types.IExtensionApi, filePath: string) {
-  api.events.emit('import-downloads', [filePath], (dlIds: string[]) => {
-    const id = dlIds[0];
-    if (id === undefined) {
-      return;
-    }
-    api.events.emit('start-install-download', id, true, (err, modId) => {
-      if (err !== null) {
-        api.showErrorNotification('Failed to install repo', err, { allowReport: false });
+async function importAndInstall(api: types.IExtensionApi, filePath: string, name: string) {
+  return new Promise<void>((resolve, reject) => {
+    api.events.emit('import-downloads', [filePath], (dlIds: string[]) => {
+      const id = dlIds[0];
+      if (id === undefined) {
+        return reject(new util.NotFound(filePath));
       }
-  
-      const state = api.getState();
-      const profileId = selectors.lastActiveProfileForGame(state, GAME_ID);
-      const batch = [
-        actions.setModAttributes(GAME_ID, modId, {
-          installTime: new Date(),
-          name: 'Plugin Enabler',
-        }),
-        actions.setModEnabled(profileId, modId, true),
-      ];
-      util.batchDispatch(api.store, batch);
-      return Promise.resolve();
+      api.events.emit('start-install-download', id, true, (err, modId) => {
+        if (err !== null) {
+          api.showErrorNotification('Failed to install repo', err, { allowReport: false });
+          return reject(err);
+        }
+    
+        const state = api.getState();
+        const profileId = selectors.lastActiveProfileForGame(state, GAME_ID);
+        const batch = [
+          actions.setModAttributes(GAME_ID, modId, {
+            installTime: new Date(),
+            name,
+          }),
+          actions.setModEnabled(profileId, modId, true),
+        ];
+        util.batchDispatch(api.store, batch);
+        return resolve();
+      });
     });
-  });
+  })
 }
 
 async function downloadNexus(api: types.IExtensionApi, requirement: IPluginRequirement) {
@@ -106,8 +111,6 @@ async function downloadNexus(api: types.IExtensionApi, requirement: IPluginRequi
   } catch (err) {
     api!.showErrorNotification('Failed to download/install requirement', err);
     util.opn(requirement?.modUrl || requirement.githubUrl).catch(() => null);
-  } finally {
-    api!.dismissNotification('plugins-enabler-installing');
   }
 }
 
