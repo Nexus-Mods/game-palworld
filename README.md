@@ -23,6 +23,7 @@ Coming Soon
 - Automatic game detection
 - Support for PAK mods
 - Support for Lua\UE4SS mods
+- Support for Blueprint\Logic mods
 
 # Installation
 
@@ -56,12 +57,15 @@ If a PAK mod is detected, it's deployment folder is `\Pal\Content\Paks\~mods`.
 
 ## Lua\UE4SS mods
 
-If a LUA mod is detected, it's deployment folder is `\Pal\Binaries\Win64\Mods`.
-
+If a LUA mod is detected, it's deployment folder is `\Pal\Content\Paks\LogicMods`.
 
 LUA mods are only detected by UE4SS if they contain an `enabled.txt` file in the mods root folder. For example, if `\Pal\Binaries\Win64\Mods\<MODFOLDER>\enabled.txt` doesn't exist, then it won't be loaded by UE4SS. Vortex does create this file if it doesn't exist during mod deployment.
 
 > Lua mods can also be detected by UE4SS if it has an entry in it's `\Pal\Binaries\Win64\Mods\mods.txt` file but it's more complicated for Vortex to manage this file and so the existence of `enabled.txt` is the better solution.
+
+## Blueprint\Logic mods
+
+If a Blueprint\Logic mod is detected, it's deployment folder is `\Pal\Binaries\Win64\Mods`.
 
 # See also
 
