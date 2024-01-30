@@ -19,8 +19,8 @@ Coming Soon
 
 # Features
 
+- Automatic game detection for Steam and Xbox
 - Downloads and installs UE4SS if it doesn't exist
-- Automatic game detection
 - Support for PAK mods
 - Support for Lua\UE4SS mods
 - Support for Blueprint\Logic mods
@@ -66,6 +66,10 @@ LUA mods are only detected by UE4SS if they contain an `enabled.txt` file in the
 ## Blueprint\Logic mods
 
 If a Blueprint\Logic mod is detected, it's deployment folder is `\Pal\Binaries\Win64\Mods`.
+
+## Unsupported mods
+
+Vortex doesn't officially support managing of mods that are reshades, save game\config edits or require external tools (apart from UE4SS). 
 
 # See also
 
