@@ -32,9 +32,9 @@ export async function findModByFile(api: types.IExtensionApi, modType: string, f
 }
 
 export async function walkPath(dirPath: string, walkOptions?: IWalkOptions): Promise<IEntry[]> {
-  walkOptions = walkOptions || { skipLinks: true, skipHidden: true, skipInaccessible: true };
-  // We REALLY don't care for hidden or inaccessible files.
-  walkOptions = { ...walkOptions, skipHidden: true, skipInaccessible: true, skipLinks: true };
+  walkOptions = !!walkOptions
+    ? { ...walkOptions, skipHidden: true, skipInaccessible: true, skipLinks: true }
+    : { skipLinks: true, skipHidden: true, skipInaccessible: true };
   const walkResults: IEntry[] = [];
   return new Promise<IEntry[]>(async (resolve, reject) => {
     await turbowalk(dirPath, (entries: IEntry[]) => {
