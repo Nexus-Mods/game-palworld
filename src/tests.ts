@@ -17,6 +17,13 @@ export async function testBluePrintModManager(api: types.IExtensionApi, eventTyp
   if (eventType === 'gamemode-activated') {
     // It's possible that the ue4ssMod didn't have a chance to install yet.
     //  Especially if the user just started to mod the game.
+    if (ue4ssMod === undefined) {
+      return;
+    }
+    // Make sure we disable the array cache.
+    await api.emitAndAwait('deploy-single-mod', GAME_ID, ue4ssMod.id, false);
+    await disableArrayCache(api, ue4ssMod);
+    await api.emitAndAwait('deploy-single-mod', GAME_ID, ue4ssMod.id);
     return;
   } else {
     await download(api, PLUGIN_REQUIREMENTS);
@@ -99,10 +106,23 @@ async function enableBPModLoader(api: types.IExtensionApi, ue4ssMod: types.IMod,
   try {
     await api.emitAndAwait('deploy-single-mod', GAME_ID, ue4ssMod.id, false);
     await fs.writeFileAsync(enabledFilePath, '', { encoding: 'utf8' });
+    await disableArrayCache(api, ue4ssMod);
   } catch (err) {
     api.showErrorNotification('Failed to enable BPModLoader', 'Please ensure that UE4SS\'s BPModLoader is enabled manually', { allowReport: false });
     return Promise.resolve();
   } finally {
     await api.emitAndAwait('deploy-single-mod', GAME_ID, ue4ssMod.id);
   }
+}
+
+async function disableArrayCache(api: types.IExtensionApi, ue4ssMod: types.IMod) {
+  const state = api.getState();
+  const stagingFolder = selectors.installPathForGame(state, GAME_ID);
+  const modPath = path.join(stagingFolder, ue4ssMod.installationPath);
+  const ue4ssRelPath = resolveUE4SSPath(api);
+  const ue4ssConfigPath = path.join(modPath, ue4ssRelPath, UE4SS_FILES[1]);
+  const data: string = await fs.readFileAsync(ue4ssConfigPath, { encoding: 'utf8' });
+  const newData = data.replace(/bUseUObjectArrayCache = true/gm, 'bUseUObjectArrayCache = false');
+  await fs.removeAsync(ue4ssConfigPath).catch(err => null);
+  await fs.writeFileAsync(ue4ssConfigPath, newData, { encoding: 'utf8' });
 }

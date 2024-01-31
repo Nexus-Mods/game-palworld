@@ -27,7 +27,8 @@ export async function installUE4SSInjector(api: types.IExtensionApi, files: stri
         ? path.join(targetPath, XBOX_UE4SS_XINPUT_REPLACEMENT)
         : path.join(targetPath, iter);
 
-      if (gameStore === 'xbox' && iter === UE4SS_FILES[1]) {
+      if (iter === UE4SS_FILES[1]) {
+        // Disable the use of Unreal's object array cache regardless of game store - it's causing crashes.
         const data: string = await fs.readFileAsync(path.join(destinationPath, iter), { encoding: 'utf8' });
         const newData = data.replace(/bUseUObjectArrayCache = true/gm, 'bUseUObjectArrayCache = false');
         const createInstr: types.IInstruction = {
