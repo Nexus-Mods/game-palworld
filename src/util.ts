@@ -1,6 +1,6 @@
 /* eslint-disable */
 import path from 'path';
-import { selectors, types, util } from 'vortex-api';
+import { fs, selectors, types, util } from 'vortex-api';
 import turbowalk, { IWalkOptions, IEntry } from 'turbowalk';
 
 import { UE4SS_PATH_PREFIX, GAME_ID, NOTIF_ID_BP_MODLOADER_DISABLED } from './common';
@@ -26,6 +26,25 @@ export async function findModByFile(api: types.IExtensionApi, modType: string, f
     const files = await walkPath(modPath);
     if (files.find(file => file.filePath.endsWith(fileName))) {
       return mod;
+    }
+  }
+  return undefined;
+}
+
+// This function is used to find the mod folder of a mod which is still in the installation phase.
+export async function findInstallFolderByFile(api: types.IExtensionApi, filePath: string): Promise<string> {
+  const installationPath = selectors.installPathForGame(api.getState(), GAME_ID);
+  const pathContents = await fs.readdirAsync(installationPath);
+  const modFolders = pathContents.filter(folder => path.extname(folder) === '.installing');
+  if (modFolders.length === 1) {
+    return path.join(installationPath, modFolders[0]);
+  } else {
+    for (const folder of modFolders) {
+      const modPath = path.join(installationPath, folder);
+      const files = await walkPath(modPath);
+      if (files.find(file => file.filePath.endsWith(filePath))) {
+        return path.join(installationPath, folder);
+      }
     }
   }
   return undefined;

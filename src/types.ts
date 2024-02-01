@@ -1,7 +1,23 @@
 import { types } from 'vortex-api';
 
+import { PakModType } from './common';
+
 export type LoadOrder = ILoadOrderEntry[];
 export type EventType = 'did-deploy' | 'gamemode-activated';
+
+export interface IPakFileInfo {
+  fileName: string;
+  offset: number;
+  size: number;
+  sha1: string;
+  compression: string;
+}
+
+export interface IPakExtractionInfo {
+  mountPoint: string;
+  files: IPakFileInfo[];
+  modType: PakModType | null;
+}
 
 export interface IGithubDownload {
   fileName: string;

@@ -84,7 +84,7 @@ function main(context: types.IExtensionContext) {
     5,
     (gameId) => GAME_ID === gameId,
     (game: types.IGame) => getBPPakPath(context.api, game),
-    testBPPakPath as any,
+    (instructions: types.IInstruction[]) => testBPPakPath(context.api, instructions) as any,
     { deploymentEssential: true, name: 'Blueprint Mod' }
   );
 
@@ -93,7 +93,7 @@ function main(context: types.IExtensionContext) {
     10,
     (gameId) => GAME_ID === gameId,
     (game: types.IGame) => getPakPath(context.api, game),
-    testPakPath as any,
+    (instructions: types.IInstruction[]) => testPakPath(context.api, instructions) as any,
     { deploymentEssential: true, name: 'Pak Mod' }
   );
 

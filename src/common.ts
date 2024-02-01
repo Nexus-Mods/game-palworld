@@ -37,6 +37,8 @@ export const MOD_TYPE_PAK = 'palworld-pak-modtype';
 export const MOD_TYPE_LUA = 'palworld-lua-modtype';
 export const MOD_TYPE_BP_PAK = 'palworld-blueprint-modtype';
 
+export type PakModType = 'palworld-pak-modtype' | 'palworld-blueprint-modtype';
+
 export const UE4SS_XINPUT_FILENAME = 'UE4SS_Xinput_v2.5.2.zip';
 
 export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
