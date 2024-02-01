@@ -3,13 +3,26 @@ import path from 'path';
 import { fs, selectors, types, util } from 'vortex-api';
 import turbowalk, { IWalkOptions, IEntry } from 'turbowalk';
 
-import { UE4SS_PATH_PREFIX, GAME_ID, NOTIF_ID_BP_MODLOADER_DISABLED } from './common';
+import { UE4SS_PATH_PREFIX, GAME_ID, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, MOD_TYPE_UNREAL_PAK_TOOL } from './common';
 
 export function resolveUE4SSPath(api: types.IExtensionApi): string {
   const state = api.getState();
   const discovery = selectors.discoveryByGame(state, GAME_ID);
   const architecture = discovery?.store === 'xbox' ? 'WinGDK' : 'Win64';
   return path.join(UE4SS_PATH_PREFIX, architecture);
+}
+
+export async function resolveUnrealPakToolPath(api: types.IExtensionApi): Promise<string | null> {
+  const state = api.getState();
+  const requirement = PLUGIN_REQUIREMENTS.find(req => req.modType === MOD_TYPE_UNREAL_PAK_TOOL);
+  if (!requirement) {
+    return null;
+  }
+  const mod: types.IMod = await requirement.findMod(api);
+  if (mod) {
+    const stagingFolder = selectors.installPathForGame(state, GAME_ID);
+    return path.join(stagingFolder, mod.installationPath);
+  }
 }
 
 export function getMods(api: types.IExtensionApi, modType: string): types.IMod[] {
@@ -67,5 +80,6 @@ export async function walkPath(dirPath: string, walkOptions?: IWalkOptions): Pro
 }
 
 export function dismissNotifications(api: types.IExtensionApi) {
+  // We're not dismissing the downloader notifications intentionally.
   [NOTIF_ID_BP_MODLOADER_DISABLED].forEach(id => api.dismissNotification(id));
 }

@@ -1,13 +1,13 @@
 /* eslint-disable */
 import * as child_process from 'child_process';
 import * as path from 'path';
-import { log } from 'vortex-api'
+import { log, types, util } from 'vortex-api'
 
-import { MOD_TYPE_BP_PAK, MOD_TYPE_PAK } from './common';
+import { MOD_TYPE_BP_PAK, MOD_TYPE_PAK, UE_PAK_TOOL_FILES } from './common';
 import { IPakExtractionInfo } from './types';
+import { resolveUnrealPakToolPath } from './util';
 
 const DEFAULT_BLUEPRINT_SEGMENT = 'mods';
-const UNREAL_PAK_EXEC_PATH = path.join(__dirname, 'UnrealPak.exe');
 
 function normalizePath(filePath: string): string {
   const trimmed = filePath.replace(/\//g, path.sep);
@@ -76,8 +76,13 @@ function parsePakListLog(logText: string): IPakExtractionInfo | null {
   return extractionInfo;
 }
 
-export async function listPak(filePath: string): Promise<IPakExtractionInfo | null> {
-  const command = `${UNREAL_PAK_EXEC_PATH} "${filePath}" -list`;
+export async function listPak(api: types.IExtensionApi, filePath: string): Promise<IPakExtractionInfo | null> {
+  const unrealPakToolToolPath = await resolveUnrealPakToolPath(api);
+  if (!unrealPakToolToolPath) {
+    return Promise.reject(new util.NotFound('UnrealPakTool'));
+  }
+  const execPath = path.join(unrealPakToolToolPath, 'UnrealPakTool', UE_PAK_TOOL_FILES[0]);
+  const command = `${execPath} "${filePath}" -list`;
   return new Promise<IPakExtractionInfo | null>((resolve, reject) => {
     child_process.exec(command, (error, stdout, stderr) => {
       if (error) {

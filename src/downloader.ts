@@ -4,13 +4,13 @@ import path from 'path';
 import { actions, fs, log, selectors, types, util } from 'vortex-api';
 import axios from 'axios';
 
-import { GAME_ID } from './common';
+import { GAME_ID, NOTIF_ID_REQUIREMENTS } from './common';
 import { IPluginRequirement, IGithubDownload } from './types';
 
 export async function download(api: types.IExtensionApi, requirements: IPluginRequirement[], force?: boolean) {
   api.sendNotification({
-    id: 'ue4ss-download-notification',
-    message: 'Installing UE4SS',
+    id: NOTIF_ID_REQUIREMENTS,
+    message: 'Installing Palworld Requirements',
     type: 'activity',
     noDismiss: true,
     allowSuppress: false,
@@ -24,6 +24,7 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
       if (force !== true && mod?.id !== undefined) {
         batchActions.push(actions.setModEnabled(profileId, mod.id, true));
         batchActions.push(actions.setModAttribute(GAME_ID, mod.id, 'customFileName', req.userFacingName));
+        batchActions.push(actions.setModAttribute(GAME_ID, mod.id, 'description', 'This is a Palworld modding requirement - leave it enabled.'));
         continue;
       }
       if (req?.modId !== undefined) {
@@ -37,13 +38,13 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
     }
   } catch (err) {
     // Fallback here.
-    log('error', 'failed to download ue4ss', err);
+    log('error', 'failed to download requirements', err);
     return;
   } finally {
     if (batchActions.length > 0) {
       util.batchDispatch(api.store, batchActions);
     }
-    api.dismissNotification('ue4ss-download-notification');
+    api.dismissNotification(NOTIF_ID_REQUIREMENTS);
   }
 }
 
