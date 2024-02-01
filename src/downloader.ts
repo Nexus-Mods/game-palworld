@@ -30,6 +30,11 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
       if (req?.modId !== undefined) {
         await downloadNexus(api, req);
       } else {
+        const dlId = req.findDownloadId(api);
+        if (dlId) {
+          await installDownload(api, dlId, req.userFacingName);
+          continue;
+        }
         const asset = await getLatestReleaseDownloadUrl(api, req);
         const tempPath = path.join(util.getVortexPath('temp'), asset.fileName);
         await doDownload(asset.url, tempPath);
@@ -48,31 +53,42 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
   }
 }
 
+async function installDownload(api: types.IExtensionApi, dlId: string, name: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    api.events.emit('start-install-download', dlId, true, (err, modId) => {
+      if (err !== null) {
+        api.showErrorNotification('Failed to install requirement', err, { allowReport: false });
+        return reject(err);
+      }
+
+      const state = api.getState();
+      const profileId = selectors.lastActiveProfileForGame(state, GAME_ID);
+      const batch = [
+        actions.setModAttributes(GAME_ID, modId, {
+          installTime: new Date(),
+          name,
+        }),
+        actions.setModEnabled(profileId, modId, true),
+      ];
+      util.batchDispatch(api.store, batch);
+      return resolve();
+    })
+  })
+}
+
 async function importAndInstall(api: types.IExtensionApi, filePath: string, name: string) {
   return new Promise<void>((resolve, reject) => {
-    api.events.emit('import-downloads', [filePath], (dlIds: string[]) => {
+    api.events.emit('import-downloads', [filePath], async (dlIds: string[]) => {
       const id = dlIds[0];
       if (id === undefined) {
         return reject(new util.NotFound(filePath));
       }
-      api.events.emit('start-install-download', id, true, (err, modId) => {
-        if (err !== null) {
-          api.showErrorNotification('Failed to install repo', err, { allowReport: false });
-          return reject(err);
-        }
-    
-        const state = api.getState();
-        const profileId = selectors.lastActiveProfileForGame(state, GAME_ID);
-        const batch = [
-          actions.setModAttributes(GAME_ID, modId, {
-            installTime: new Date(),
-            name,
-          }),
-          actions.setModEnabled(profileId, modId, true),
-        ];
-        util.batchDispatch(api.store, batch);
+      try {
+        await installDownload(api, id, name);
         return resolve();
-      });
+      } catch (err) {
+        return reject(err);
+      }
     });
   })
 }

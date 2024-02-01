@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - Added Pak parser to better ascertain modTypes
 - Added Unreal Pak Tool downloader
+- Fixed attempts to re-download UE4SS and Unreal Pak Tool when mod is uninstalled (but archive still exists)
 
 ## [0.1.2] - 2024-01-31
 

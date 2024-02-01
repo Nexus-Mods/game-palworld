@@ -2,7 +2,7 @@
 import path from 'path';
 import { types } from 'vortex-api';
 import { IPluginRequirement } from './types';
-import { findModByFile } from './util';
+import { findDownloadIdByFile, findModByFile } from './util';
 
 export const NAMESPACE = 'game-palworld';
 
@@ -56,6 +56,7 @@ export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
     userFacingName: 'UE4 Scripting System',
     githubUrl: 'https://api.github.com/repos/UE4SS-RE/RE-UE4SS',
     findMod: (api: types.IExtensionApi) => findModByFile(api, '', UE4SS_FILES[1]),
+    findDownloadId: (api: types.IExtensionApi) => findDownloadIdByFile(api, UE4SS_XINPUT_FILENAME),
   },
   {
     fileName: UE_PAK_TOOL_FILENAME,
@@ -63,5 +64,6 @@ export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
     userFacingName: 'Unreal Pak Tool',
     githubUrl: 'https://api.github.com/repos/allcoolthingsatoneplace/UnrealPakTool',
     findMod: (api: types.IExtensionApi) => findModByFile(api, MOD_TYPE_UNREAL_PAK_TOOL, UE_PAK_TOOL_FILES[0]),
+    findDownloadId: (api: types.IExtensionApi) => findDownloadIdByFile(api, UE_PAK_TOOL_FILENAME),
   },
 ]

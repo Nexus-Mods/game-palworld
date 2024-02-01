@@ -33,6 +33,7 @@ export interface IPluginRequirement {
   githubUrl?: string;
   modUrl?: string;
   findMod: (api: types.IExtensionApi) => Promise<types.IMod>;
+  findDownloadId: (api: types.IExtensionApi) => string;
   fileFilter?: (file: string) => boolean;
 }
 

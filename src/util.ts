@@ -44,6 +44,18 @@ export async function findModByFile(api: types.IExtensionApi, modType: string, f
   return undefined;
 }
 
+export function findDownloadIdByFile(api: types.IExtensionApi, fileName: string): string {
+  const state = api.getState();
+  state.persistent.downloads.files
+  const downloads: { [dlId: string]: types.IDownload } = util.getSafe(state, ['persistent', 'downloads', 'files'], {});
+  return Object.entries(downloads).reduce((prev, [dlId, dl]) => {
+    if (path.basename(dl.localPath).toLowerCase() === fileName.toLowerCase()) {
+      prev = dlId;
+    }
+    return prev;
+  }, '');
+}
+
 // This function is used to find the mod folder of a mod which is still in the installation phase.
 export async function findInstallFolderByFile(api: types.IExtensionApi, filePath: string): Promise<string> {
   const installationPath = selectors.installPathForGame(api.getState(), GAME_ID);
