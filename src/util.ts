@@ -1,15 +1,28 @@
 /* eslint-disable */
 import path from 'path';
-import { selectors, types, util } from 'vortex-api';
+import { fs, selectors, types, util } from 'vortex-api';
 import turbowalk, { IWalkOptions, IEntry } from 'turbowalk';
 
-import { UE4SS_PATH_PREFIX, GAME_ID, NOTIF_ID_BP_MODLOADER_DISABLED } from './common';
+import { UE4SS_PATH_PREFIX, GAME_ID, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, MOD_TYPE_UNREAL_PAK_TOOL } from './common';
 
 export function resolveUE4SSPath(api: types.IExtensionApi): string {
   const state = api.getState();
   const discovery = selectors.discoveryByGame(state, GAME_ID);
   const architecture = discovery?.store === 'xbox' ? 'WinGDK' : 'Win64';
   return path.join(UE4SS_PATH_PREFIX, architecture);
+}
+
+export async function resolveUnrealPakToolPath(api: types.IExtensionApi): Promise<string | null> {
+  const state = api.getState();
+  const requirement = PLUGIN_REQUIREMENTS.find(req => req.modType === MOD_TYPE_UNREAL_PAK_TOOL);
+  if (!requirement) {
+    return null;
+  }
+  const mod: types.IMod = await requirement.findMod(api);
+  if (mod) {
+    const stagingFolder = selectors.installPathForGame(state, GAME_ID);
+    return path.join(stagingFolder, mod.installationPath);
+  }
 }
 
 export function getMods(api: types.IExtensionApi, modType: string): types.IMod[] {
@@ -26,6 +39,37 @@ export async function findModByFile(api: types.IExtensionApi, modType: string, f
     const files = await walkPath(modPath);
     if (files.find(file => file.filePath.endsWith(fileName))) {
       return mod;
+    }
+  }
+  return undefined;
+}
+
+export function findDownloadIdByFile(api: types.IExtensionApi, fileName: string): string {
+  const state = api.getState();
+  state.persistent.downloads.files
+  const downloads: { [dlId: string]: types.IDownload } = util.getSafe(state, ['persistent', 'downloads', 'files'], {});
+  return Object.entries(downloads).reduce((prev, [dlId, dl]) => {
+    if (path.basename(dl.localPath).toLowerCase() === fileName.toLowerCase()) {
+      prev = dlId;
+    }
+    return prev;
+  }, '');
+}
+
+// This function is used to find the mod folder of a mod which is still in the installation phase.
+export async function findInstallFolderByFile(api: types.IExtensionApi, filePath: string): Promise<string> {
+  const installationPath = selectors.installPathForGame(api.getState(), GAME_ID);
+  const pathContents = await fs.readdirAsync(installationPath);
+  const modFolders = pathContents.filter(folder => path.extname(folder) === '.installing');
+  if (modFolders.length === 1) {
+    return path.join(installationPath, modFolders[0]);
+  } else {
+    for (const folder of modFolders) {
+      const modPath = path.join(installationPath, folder);
+      const files = await walkPath(modPath);
+      if (files.find(file => file.filePath.endsWith(filePath))) {
+        return path.join(installationPath, folder);
+      }
     }
   }
   return undefined;
@@ -48,5 +92,6 @@ export async function walkPath(dirPath: string, walkOptions?: IWalkOptions): Pro
 }
 
 export function dismissNotifications(api: types.IExtensionApi) {
+  // We're not dismissing the downloader notifications intentionally.
   [NOTIF_ID_BP_MODLOADER_DISABLED].forEach(id => api.dismissNotification(id));
 }

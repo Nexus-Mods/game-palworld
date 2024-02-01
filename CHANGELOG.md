@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.1.3] - 2024-02-01
+
+- Added Pak parser to better ascertain modTypes
+- Added Unreal Pak Tool downloader
+- Fixed attempts to re-download UE4SS and Unreal Pak Tool when mod is uninstalled (but archive still exists)
+
 ## [0.1.2] - 2024-01-31
 
 - Added test to ensure that bUseUObjectArrayCache is set to false regardless of game store (on extension activation).

@@ -1,6 +1,6 @@
 {
   "name": "palworld",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Vortex Extension for Palworld",
   "author": "Nexus Mods",
   "private": true,
@@ -12,7 +12,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "copyassets": "copyfiles -f ./src/assets/* ./dist/",
+    "copyassets": "copyfiles -f ./src/assets/** ./dist/",
     "build": "npx webpack && yarn copyassets && node createinfojson.js && yarn packplugin && yarn copystyles",
     "buildcopydev": "yarn build && yarn copyplugindev",
     "copystyles": "node copystyles.js",

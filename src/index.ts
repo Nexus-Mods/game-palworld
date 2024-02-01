@@ -6,10 +6,10 @@ import { actions, fs, types, selectors, util } from 'vortex-api';
 
 import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
   PAK_MODSFOLDER_PATH, STEAMAPP_ID, XBOX_EXECUTABLE, XBOX_ID,
-  PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA, MOD_TYPE_BP_PAK, BPPAK_MODSFOLDER_PATH, } from './common';
+  PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA, MOD_TYPE_BP_PAK, BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, } from './common';
 
 import { getStopPatterns } from './stopPatterns';
-import { getBPPakPath, getLUAPath, getPakPath, testBPPakPath, testLUAPath, testPakPath } from './modTypes';
+import { getBPPakPath, getLUAPath, getPakPath, testBPPakPath, testLUAPath, testPakPath, testUnrealPakTool } from './modTypes';
 import { installUE4SSInjector, testUE4SSInjector } from './installers';
 import { testBluePrintModManager } from './tests';
 
@@ -76,6 +76,15 @@ function main(context: types.IExtensionContext) {
   context.registerInstaller('palworld-ue4ss', 10, testUE4SSInjector as any,
     (files, destinationPath, gameId) => installUE4SSInjector(context.api, files, destinationPath, gameId) as any);
 
+  context.registerModType(
+    MOD_TYPE_UNREAL_PAK_TOOL,
+    4,
+    (gameId) => GAME_ID === gameId,
+    () => undefined, // Don't deploy.
+    testUnrealPakTool as any,
+    { deploymentEssential: false, name: 'Unreal Pak Tool', mergeMods: true }
+  );
+
   // BP_PAK modType must have a lower priority than regular PAKs
   //  this ensures that we get a chance to detect the LogicMods folder
   //  structure before we just deploy it to ~mods
@@ -84,7 +93,7 @@ function main(context: types.IExtensionContext) {
     5,
     (gameId) => GAME_ID === gameId,
     (game: types.IGame) => getBPPakPath(context.api, game),
-    testBPPakPath as any,
+    (instructions: types.IInstruction[]) => testBPPakPath(context.api, instructions) as any,
     { deploymentEssential: true, name: 'Blueprint Mod' }
   );
 
@@ -93,7 +102,7 @@ function main(context: types.IExtensionContext) {
     10,
     (gameId) => GAME_ID === gameId,
     (game: types.IGame) => getPakPath(context.api, game),
-    testPakPath as any,
+    (instructions: types.IInstruction[]) => testPakPath(context.api, instructions) as any,
     { deploymentEssential: true, name: 'Pak Mod' }
   );
 
