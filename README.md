@@ -47,6 +47,13 @@ It is also possible to manually set the game folder if the auto detection doesn'
 
 If your game lacks this file then it is likely that your installation has become corrupted somehow.
 
+# Setup & Dependencies
+
+There are 2 tools which are automatically downloaded and installed to help with modding this game.
+
+- [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) - a generic mod loading and scripting system for Unreal Engine games 
+- [UnrealPakTool](https://github.com/allcoolthingsatoneplace/UnrealPakTool) - enables reading of PAK file contents to help us determine what type of mod and where it needs to be deployed
+
 # Mod Management
 
 By default, Vortex will deploy files to the game's root folder and extracts the archive while preserving it's folder structure.
@@ -80,7 +87,9 @@ Vortex doesn't officially support managing of mods that are reshades, save game\
 
 # Thanks
 
-To all those that work on [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS), you are doing an epic job.
+- The [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) team for doing an amazing job.
+- [UnrealPakTool](https://github.com/allcoolthingsatoneplace/UnrealPakTool) for enabling us peek inside the PAK files.
+- [Khejanin](https://github.com/Khejanin) (Palworld Modding Discord) for helping with PAK type detection. 
 
 # Changelog
 
