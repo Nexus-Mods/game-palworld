@@ -28,7 +28,7 @@ export const IGNORE_CONFLICTS = ['ue4sslogicmod.info', '.ue4sslogicmod', '.logic
 export const UE4SS_ENABLED_FILE = 'enabled.txt';
 export const XBOX_UE4SS_XINPUT_REPLACEMENT = 'xinput1_4.dll';
 export const UE4SS_FILES = [
-  'xinput1_3.dll', 'UE4SS-settings.ini',
+  'dwmapi.dll', 'UE4SS-settings.ini',
 ];
 
 export const UE_PAK_TOOL_FILES = [
@@ -46,7 +46,7 @@ export const MOD_TYPE_UNREAL_PAK_TOOL = 'palworld-unreal-pak-tool-modtype';
 
 export type PakModType = 'palworld-pak-modtype' | 'palworld-blueprint-modtype';
 
-export const UE4SS_XINPUT_FILENAME = 'UE4SS_Xinput_v2.5.2.zip';
+export const UE4SS_XINPUT_FILENAME = 'UE4SS_v3.0.0.zip';
 export const UE_PAK_TOOL_FILENAME = 'UnrealPakTool.zip';
 
 export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
