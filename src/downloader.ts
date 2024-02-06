@@ -108,7 +108,7 @@ async function importAndInstall(api: types.IExtensionApi, filePath: string, name
         return reject(new util.NotFound(filePath));
       }
       const batched = [];
-      batched.push(actions.setDownloadModInfo(id, 'source', 'Github'));
+      batched.push(actions.setDownloadModInfo(id, 'source', 'other'));
       util.batchDispatch(api.store, batched);
       try {
         await installDownload(api, id, name);
