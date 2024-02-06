@@ -21,7 +21,6 @@ Coming Soon
 
 - Automatic game detection for Steam and Xbox
 - Downloads and installs UE4SS if it doesn't exist
-- Informs the user of UE4SS updates when activating the gameMode inside Vortex or when checking for mod updates using the "Check for Updates" button in the Mods page (top toolbar)
 - Support for PAK mods
 - Support for Lua\UE4SS mods
 - Support for Blueprint\Logic mods
@@ -79,6 +78,10 @@ If a Blueprint\Logic mod is detected, it's deployment folder is `\Pal\Binaries\W
 
 Vortex doesn't officially support managing of mods that are reshades, save game\config edits or require external tools (apart from UE4SS). 
 
+# Known Issues
+
+- Due to erroneous metadata on Nexus Mods, the download file for UE4SS 3.0.0 might point to a different game and raise a notification. It is completely safe to ignore this.
+
 # See also
 
 - [Download the Extension (Nexus Mods)](https://www.nexusmods.com/site/mods/770)
@@ -96,5 +99,3 @@ Vortex doesn't officially support managing of mods that are reshades, save game\
 
 Please check out [CHANGELOG.md](/CHANGELOG.md)
 
-# Known Issues
-- Due to erroneous metadata on our website, the download file for UE4SS 3.0.0 might point to a different game (might mention this in a notification). It is completely safe to ignore this notification.
