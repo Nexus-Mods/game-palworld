@@ -1,9 +1,12 @@
 /* eslint-disable */
 import path from 'path';
-import { fs, selectors, types, util } from 'vortex-api';
+import semver from 'semver';
+import { fs, log, selectors, types, util } from 'vortex-api';
 import turbowalk, { IWalkOptions, IEntry } from 'turbowalk';
 
-import { UE4SS_PATH_PREFIX, GAME_ID, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, MOD_TYPE_UNREAL_PAK_TOOL } from './common';
+import { UE4SS_PATH_PREFIX, GAME_ID, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, MOD_TYPE_UNREAL_PAK_TOOL, NOTIF_ID_UE4SS_UPDATE } from './common';
+
+import { IPluginRequirement } from './types';
 
 export function resolveUE4SSPath(api: types.IExtensionApi): string {
   const state = api.getState();
@@ -25,14 +28,30 @@ export async function resolveUnrealPakToolPath(api: types.IExtensionApi): Promis
   }
 }
 
-export function getMods(api: types.IExtensionApi, modType: string): types.IMod[] {
+export async function resolveVersionByPattern(api: types.IExtensionApi, requirement: IPluginRequirement): Promise<string> {
+  const state = api.getState();
+  const files: types.IDownload[] = util.getSafe(state, ['persistent', 'downloads', 'files'], []);
+  const latestVersion = Object.values(files).reduce((prev, file) => {
+    const match = requirement.fileArchivePattern.exec(file.localPath);
+    if (match?.[1] && semver.gt(match[1], prev)) {
+      prev = match[1];
+    }
+    return prev;
+  }, '0.0.0');
+  return latestVersion;
+}
+
+export function getEnabledMods(api: types.IExtensionApi, modType: string): types.IMod[] {
   const state = api.getState();
   const mods = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
-  return Object.values(mods).filter((mod: types.IMod) => mod.type === modType || mod.type === '') as types.IMod[];
+  const profileId = selectors.lastActiveProfileForGame(state, GAME_ID);
+  const profile = util.getSafe(state, ['persistent', 'profiles', profileId], {});
+  const isEnabled = (modId) => util.getSafe(profile, ['modState', modId, 'enabled'], false);
+  return Object.values(mods).filter((mod: types.IMod) => isEnabled(mod.id) && (mod.type === modType || mod.type === '')) as types.IMod[];
 }
 
 export async function findModByFile(api: types.IExtensionApi, modType: string, fileName: string): Promise<types.IMod> {
-  const mods = getMods(api, modType);
+  const mods = getEnabledMods(api, modType);
   const installationPath = selectors.installPathForGame(api.getState(), GAME_ID);
   for (const mod of mods) {
     const modPath = path.join(installationPath, mod.installationPath);
@@ -44,9 +63,27 @@ export async function findModByFile(api: types.IExtensionApi, modType: string, f
   return undefined;
 }
 
+export function findDownloadIdByPattern(api: types.IExtensionApi, requirement: IPluginRequirement): string | null {
+  if (!requirement.fileArchivePattern) {
+    log('warn', `no fileArchivePattern defined for ${requirement.archiveFileName}`, 'findDownloadIdByPattern');
+    return null;
+  }
+  const state = api.getState();
+  const downloads: { [dlId: string]: types.IDownload } = util.getSafe(state, ['persistent', 'downloads', 'files'], {});
+  const id: string | null = Object.entries(downloads).reduce((prev: string | null, [dlId, dl]: [string, types.IDownload]) => {
+    if (!prev && !!requirement.fileArchivePattern) {
+      const match = requirement.fileArchivePattern.exec(dl.localPath);
+      if (match) {
+        prev = dlId;
+      }
+    }
+    return prev;
+  }, null);
+  return id;
+}
+
 export function findDownloadIdByFile(api: types.IExtensionApi, fileName: string): string {
   const state = api.getState();
-  state.persistent.downloads.files
   const downloads: { [dlId: string]: types.IDownload } = util.getSafe(state, ['persistent', 'downloads', 'files'], {});
   return Object.entries(downloads).reduce((prev, [dlId, dl]) => {
     if (path.basename(dl.localPath).toLowerCase() === fileName.toLowerCase()) {
@@ -93,5 +130,5 @@ export async function walkPath(dirPath: string, walkOptions?: IWalkOptions): Pro
 
 export function dismissNotifications(api: types.IExtensionApi) {
   // We're not dismissing the downloader notifications intentionally.
-  [NOTIF_ID_BP_MODLOADER_DISABLED].forEach(id => api.dismissNotification(id));
+  [NOTIF_ID_BP_MODLOADER_DISABLED, NOTIF_ID_UE4SS_UPDATE].forEach(id => api.dismissNotification(id));
 }

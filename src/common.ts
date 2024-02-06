@@ -2,12 +2,13 @@
 import path from 'path';
 import { types } from 'vortex-api';
 import { IPluginRequirement } from './types';
-import { findDownloadIdByFile, findModByFile } from './util';
+import { findDownloadIdByFile, findModByFile, resolveVersionByPattern, findDownloadIdByPattern } from './util';
 
 export const NAMESPACE = 'game-palworld';
 
 export const NOTIF_ID_BP_MODLOADER_DISABLED = 'notif-palworld-bp-modloader-disabled';
 export const NOTIF_ID_REQUIREMENTS = 'palworld-requirements-download-notification';
+export const NOTIF_ID_UE4SS_UPDATE = 'palworld-ue4ss-version-update';
 
 export const DEFAULT_EXECUTABLE = 'Palworld.exe'; // path to executable, relative to game root
 export const XBOX_EXECUTABLE = 'gamelaunchhelper.exe';
@@ -46,20 +47,24 @@ export const MOD_TYPE_UNREAL_PAK_TOOL = 'palworld-unreal-pak-tool-modtype';
 
 export type PakModType = 'palworld-pak-modtype' | 'palworld-blueprint-modtype';
 
-export const UE4SS_XINPUT_FILENAME = 'UE4SS_Xinput_v2.5.2.zip';
+export const UE4SS_XINPUT_FILENAME = 'UE4SS_v3.0.0.zip';
+export const UE4SS_DWMAPI = 'dwmapi.dll';
 export const UE_PAK_TOOL_FILENAME = 'UnrealPakTool.zip';
 
 export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
   {
-    fileName: UE4SS_XINPUT_FILENAME,
+    archiveFileName: UE4SS_XINPUT_FILENAME,
     modType: '',
+    assemblyFileName: UE4SS_DWMAPI,
     userFacingName: 'UE4 Scripting System',
     githubUrl: 'https://api.github.com/repos/UE4SS-RE/RE-UE4SS',
     findMod: (api: types.IExtensionApi) => findModByFile(api, '', UE4SS_FILES[1]),
-    findDownloadId: (api: types.IExtensionApi) => findDownloadIdByFile(api, UE4SS_XINPUT_FILENAME),
+    findDownloadId: (api: types.IExtensionApi) => findDownloadIdByPattern(api, PLUGIN_REQUIREMENTS[0]),
+    fileArchivePattern: new RegExp(/^UE4SS.*v(\d+\.\d+\.\d+)/, 'i'),
+    resolveVersion: (api: types.IExtensionApi) => resolveVersionByPattern(api, PLUGIN_REQUIREMENTS[0]),
   },
   {
-    fileName: UE_PAK_TOOL_FILENAME,
+    archiveFileName: UE_PAK_TOOL_FILENAME,
     modType: MOD_TYPE_UNREAL_PAK_TOOL,
     userFacingName: 'Unreal Pak Tool',
     githubUrl: 'https://api.github.com/repos/allcoolthingsatoneplace/UnrealPakTool',

@@ -1,11 +1,14 @@
 /* eslint-disable */
 
 import path from 'path';
+import semver from 'semver';
 import { actions, fs, log, selectors, types, util } from 'vortex-api';
+
 import axios from 'axios';
 
 import { GAME_ID, NOTIF_ID_REQUIREMENTS } from './common';
-import { IPluginRequirement, IGithubDownload } from './types';
+import { IPluginRequirement, IGitHubAsset, IGitHubRelease } from './types';
+
 
 export async function download(api: types.IExtensionApi, requirements: IPluginRequirement[], force?: boolean) {
   api.sendNotification({
@@ -20,8 +23,22 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
   const profileId = selectors.lastActiveProfileForGame(api.getState(), GAME_ID);
   try {
     for (const req of requirements) {
+      let asset;
+      let versionMismatch = false;
       const mod = await req.findMod(api);
-      if (force !== true && mod?.id !== undefined) {
+      if (!!mod && req.resolveVersion) {
+        // Ensure it's the right version.
+        const version = await req.resolveVersion(api);
+        asset = await getLatestGithubReleaseAsset(api, req);
+        const coerced = semver.coerce(asset.release.tag_name);
+        if (semver.gt(coerced.version, version)) {
+          versionMismatch = true;
+          batchActions.push(actions.setModEnabled(profileId, mod.id, false));
+        } else {
+          continue;
+        }
+      }
+      else if (!versionMismatch && force !== true && mod?.id !== undefined) {
         batchActions.push(actions.setModEnabled(profileId, mod.id, true));
         batchActions.push(actions.setModAttribute(GAME_ID, mod.id, 'customFileName', req.userFacingName));
         batchActions.push(actions.setModAttribute(GAME_ID, mod.id, 'description', 'This is a Palworld modding requirement - leave it enabled.'));
@@ -31,14 +48,21 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
         await downloadNexus(api, req);
       } else {
         const dlId = req.findDownloadId(api);
-        if (dlId) {
+        if (!versionMismatch && !force && dlId) {
           await installDownload(api, dlId, req.userFacingName);
           continue;
         }
-        const asset = await getLatestReleaseDownloadUrl(api, req);
-        const tempPath = path.join(util.getVortexPath('temp'), asset.fileName);
-        await doDownload(asset.url, tempPath);
-        await importAndInstall(api, tempPath, req.userFacingName);
+        if (!asset) {
+          asset = await getLatestGithubReleaseAsset(api, req);
+        }
+        const tempPath = path.join(util.getVortexPath('temp'), asset.name);
+        try {
+          await doDownload(asset.browser_download_url, tempPath);
+          await importAndInstall(api, tempPath, req.userFacingName);
+        } catch (err) {
+          api.showErrorNotification('Failed to download requirements', err, { allowReport: false });
+          return;
+        }
       }
     }
   } catch (err) {
@@ -83,6 +107,9 @@ async function importAndInstall(api: types.IExtensionApi, filePath: string, name
       if (id === undefined) {
         return reject(new util.NotFound(filePath));
       }
+      const batched = [];
+      batched.push(actions.setDownloadModInfo(id, 'source', 'other'));
+      util.batchDispatch(api.store, batched);
       try {
         await installDownload(api, id, name);
         return resolve();
@@ -112,7 +139,7 @@ async function downloadNexus(api: types.IExtensionApi, requirement: IPluginRequi
 
     const dlInfo = {
       game: GAME_ID,
-      name: requirement.fileName,
+      name: requirement.archiveFileName,
     };
 
     const nxmUrl = `nxm://${GAME_ID}/mods/${requirement.modId}/files/${file.file_id}`;
@@ -131,20 +158,45 @@ async function downloadNexus(api: types.IExtensionApi, requirement: IPluginRequi
   }
 }
 
-async function getLatestReleaseDownloadUrl(api: types.IExtensionApi, requirement: IPluginRequirement): Promise<IGithubDownload | null> {
+export async function getLatestGithubReleaseAsset(api: types.IExtensionApi, requirement: IPluginRequirement): Promise<IGitHubAsset | null> {
+  const chooseAsset = (release: IGitHubRelease) => {
+    const assets = release.assets;
+    if (!!requirement.fileArchivePattern) {
+      const asset = assets.find(asset => requirement.fileArchivePattern.exec(asset.name));
+      if (asset) {
+        return {
+          ...asset,
+          release,
+        };
+      }
+    } else {
+      // Try to find the asset based on the filename we provided - otherwise we just pick the first asset.
+      const asset = assets.find((asset: any) => asset.name.includes(requirement.archiveFileName)) ?? assets[0];
+      return {
+        ...asset,
+        release,
+      }
+    }
+  }
   try {
     const response = await axios.get(`${requirement.githubUrl}/releases/latest`);
+    const resHeaders = response.headers;
+    const callsRemaining = parseInt(util.getSafe(resHeaders, ['x-ratelimit-remaining'], '0'), 10);
+    if ([403, 404].includes(response?.status) && (callsRemaining === 0)) {
+        const resetDate = parseInt(util.getSafe(resHeaders, ['x-ratelimit-reset'], '0'), 10);
+        log('info', 'GitHub rate limit exceeded', { reset_at: (new Date(resetDate)).toString() });
+        return Promise.reject(new util.ProcessCanceled('GitHub rate limit exceeded'));
+    }
     if (response.status === 200) {
-      const release = response.data;
+      const release: IGitHubRelease = response.data;
       if (release.assets.length > 0) {
-        const chosenAsset = release.assets.find((asset: any) => asset.name.includes(requirement.fileName));
-        return { fileName: chosenAsset.name, url: chosenAsset.browser_download_url  };
+        return chooseAsset(release);
       }
     }
   } catch (error) {
     api!.showErrorNotification(
       'Error fetching the latest release url for {{repName}}',
-      error, { allowReport: false, replace: { repName: requirement.fileName } });
+      error, { allowReport: false, replace: { repName: requirement.archiveFileName } });
   }
 
   return null;
@@ -160,5 +212,12 @@ export async function doDownload(downloadUrl: string, destination: string): Prom
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
     },
   });
+  const resHeaders = response.headers;
+  const callsRemaining = parseInt(util.getSafe(resHeaders, ['x-ratelimit-remaining'], '0'), 10);
+  if ([403, 404].includes(response?.status) && (callsRemaining === 0)) {
+    const resetDate = parseInt(util.getSafe(resHeaders, ['x-ratelimit-reset'], '0'), 10);
+    log('info', 'GitHub rate limit exceeded', { reset_at: (new Date(resetDate)).toString() });
+    return Promise.reject(new util.ProcessCanceled('GitHub rate limit exceeded'));
+  }
   await fs.writeFileAsync(destination, Buffer.from(response.data));
 }

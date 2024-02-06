@@ -1,8 +1,9 @@
 /* eslint-disable */
 
 import path from 'path';
+import * as semver from 'semver';
 
-import { actions, fs, types, selectors, util } from 'vortex-api';
+import { actions, fs, log, types, selectors, util } from 'vortex-api';
 
 import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
   PAK_MODSFOLDER_PATH, STEAMAPP_ID, XBOX_EXECUTABLE, XBOX_ID,
@@ -11,10 +12,10 @@ import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
 import { getStopPatterns } from './stopPatterns';
 import { getBPPakPath, getLUAPath, getPakPath, testBPPakPath, testLUAPath, testPakPath, testUnrealPakTool } from './modTypes';
 import { installUE4SSInjector, testUE4SSInjector } from './installers';
-import { testBluePrintModManager } from './tests';
+import { testBluePrintModManager, testUE4SSVersion } from './tests';
 
 import { dismissNotifications, resolveUE4SSPath } from './util';
-import { download } from './downloader';
+import { download, getLatestGithubReleaseAsset } from './downloader';
 
 const supportedTools: types.ITool[] = [];
 
@@ -82,7 +83,7 @@ function main(context: types.IExtensionContext) {
     (gameId) => GAME_ID === gameId,
     () => undefined, // Don't deploy.
     testUnrealPakTool as any,
-    { deploymentEssential: false, name: 'Unreal Pak Tool', mergeMods: true }
+    { deploymentEssential: false, name: 'Unreal Pak Tool' }
   );
 
   // BP_PAK modType must have a lower priority than regular PAKs
@@ -140,9 +141,7 @@ function main(context: types.IExtensionContext) {
     context.api.onAsync('did-deploy', (profileId: string, deployment: types.IDeploymentManifest) => onDidDeployEvent(context.api, profileId, deployment));
     context.api.onAsync('will-purge', (profileId: string) => onWillPurgeEvent(context.api, profileId));
     context.api.onAsync('did-purge', (profileId: string) => onDidPurgeEvent(context.api, profileId));
-    // context.api.onAsync('intercept-file-changes', (intercepted: types.IFileChange[], cb: (result: types.IFileChange[]) => void) => {
-    //   return onInterceptFileChanges(context.api, intercepted, cb);
-    // });
+    context.api.onAsync('check-mods-version', (gameId: string, mods: types.IMod[], forced?: boolean) => onCheckModVersion(context.api, gameId, mods, forced));
   });
 
   return true;
@@ -171,6 +170,7 @@ async function onGameModeActivated(api: types.IExtensionApi) {
   }
 
   try {
+    await testUE4SSVersion(api);
     await testBluePrintModManager(api, 'gamemode-activated');
   } catch (err) {
     // All errors should've been handled in the test - if this
@@ -187,7 +187,11 @@ async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, dep
     return Promise.resolve();
   }
 
-  await testBluePrintModManager(api, 'did-deploy');
+  try {
+    await testBluePrintModManager(api, 'did-deploy');
+  } catch (err) {
+    log('warn', 'failed to test BluePrint Mod Manager', err);
+  }
 
   return Promise.resolve();
 }
@@ -213,6 +217,18 @@ async function onWillDeployEvent(api: types.IExtensionApi, profileId: any, deplo
   if (!discovery?.path || discovery?.store !== 'xbox') {
     // Game not discovered or not Xbox? bail.
     return Promise.resolve();
+  }
+}
+
+async function onCheckModVersion(api: types.IExtensionApi, gameId: string, mods: types.IMod[], forced?: boolean) {
+  const profile = selectors.activeProfile(api.getState());
+  if (profile.gameId !== GAME_ID || gameId !== GAME_ID) {
+    return;
+  }
+  try {
+    await testUE4SSVersion(api);
+  } catch (err) {
+    log('warn', 'failed to test UE4SS version', err);
   }
 }
 
