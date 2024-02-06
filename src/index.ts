@@ -12,7 +12,7 @@ import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
 import { getStopPatterns } from './stopPatterns';
 import { getBPPakPath, getLUAPath, getPakPath, testBPPakPath, testLUAPath, testPakPath, testUnrealPakTool } from './modTypes';
 import { installUE4SSInjector, testUE4SSInjector } from './installers';
-import { testBluePrintModManager } from './tests';
+import { testBluePrintModManager, testUE4SSVersion } from './tests';
 
 import { dismissNotifications, resolveUE4SSPath } from './util';
 import { download, getLatestGithubReleaseAsset } from './downloader';
@@ -83,7 +83,7 @@ function main(context: types.IExtensionContext) {
     (gameId) => GAME_ID === gameId,
     () => undefined, // Don't deploy.
     testUnrealPakTool as any,
-    { deploymentEssential: false, name: 'Unreal Pak Tool', mergeMods: true }
+    { deploymentEssential: false, name: 'Unreal Pak Tool' }
   );
 
   // BP_PAK modType must have a lower priority than regular PAKs
@@ -170,6 +170,7 @@ async function onGameModeActivated(api: types.IExtensionApi) {
   }
 
   try {
+    await testUE4SSVersion(api);
     await testBluePrintModManager(api, 'gamemode-activated');
   } catch (err) {
     // All errors should've been handled in the test - if this
@@ -225,24 +226,9 @@ async function onCheckModVersion(api: types.IExtensionApi, gameId: string, mods:
     return;
   }
   try {
-    const ue4ssRequirement = PLUGIN_REQUIREMENTS[0];
-    const ue4ssInstalledVersion: string = await ue4ssRequirement.resolveVersion(api);
-    if (!ue4ssInstalledVersion) {
-      // ue4ss not installed
-      return;
-    }
-    const latestAsset = await getLatestGithubReleaseAsset(api, ue4ssRequirement);
-    const latestVersion = semver.coerce(latestAsset.release.tag_name);
-    if (semver.gt(latestVersion.version, ue4ssInstalledVersion)) {
-      const currentMod = await ue4ssRequirement.findMod(api);
-      if (currentMod) {
-        api.store.dispatch(actions.setModEnabled(profile.id, currentMod.id, false));
-      }
-      await download(api, [ue4ssRequirement], true);
-    }
+    await testUE4SSVersion(api);
   } catch (err) {
-    api.showErrorNotification('Error checking for UE4SS updates', err);
-    return;
+    log('warn', 'failed to test UE4SS version', err);
   }
 }
 

@@ -1,11 +1,54 @@
 /* eslint-disable */
 import path from 'path';
-import { fs, log, types, selectors } from 'vortex-api';
+import semver from 'semver';
+import { fs, log, types, selectors, actions } from 'vortex-api';
 
 import { GAME_ID, NAMESPACE, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, UE4SS_ENABLED_FILE, UE4SS_FILES } from './common';
 import { EventType } from './types';
 import { findModByFile, resolveUE4SSPath } from './util';
-import { download } from './downloader';
+import { download, getLatestGithubReleaseAsset } from './downloader';
+
+export async function testUE4SSVersion(api: types.IExtensionApi, eventType?: EventType) {
+  const t = api.translate;
+  const requirement = PLUGIN_REQUIREMENTS[0];
+  const currentVersion = await requirement.resolveVersion(api);
+  const latest = await getLatestGithubReleaseAsset(api, requirement);
+  const coercedVersion = semver.coerce(latest.release.tag_name);
+  if (!semver.gt(coercedVersion.version, currentVersion)) {
+    return;
+  }
+
+  const more = (dismiss) => {
+    api.showDialog('question', 'Update UE4SS', {
+      bbcode: t('A new UE4SS update has been released "v{{latestVersion}}" - your modding environment is currently set to "v{{currentVersion}}".[br][/br][br][/br]'
+              + 'Would you like to update? (if your modding environment is functioning correctly, there may be no reason to update.)', { replace: { currentVersion, latestVersion: coercedVersion.version } }),
+    }, [
+      {
+        label: 'Download', default: true, action: () => {
+          download(api, [requirement]);
+          dismiss();
+        }
+      },
+      { label: 'Close', action: () => dismiss() }
+    ])
+  }
+
+  api.sendNotification({
+    message: 'UE4SS update available',
+    type: 'warning',
+    allowSuppress: true,
+    id: 'palworld-ue4ss-version',
+    actions: [
+      { title: 'More', action: more },
+      {
+        title: 'Download', action: (dismiss) => {
+          download(api, [requirement]);
+          dismiss();
+        }
+      }
+    ]
+  });
+}
 
 export async function testBluePrintModManager(api: types.IExtensionApi, eventType: EventType): Promise<void> {
   const state = api.getState();

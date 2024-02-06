@@ -8,6 +8,7 @@ export const NAMESPACE = 'game-palworld';
 
 export const NOTIF_ID_BP_MODLOADER_DISABLED = 'notif-palworld-bp-modloader-disabled';
 export const NOTIF_ID_REQUIREMENTS = 'palworld-requirements-download-notification';
+export const NOTIF_ID_UE4SS_UPDATE = 'palworld-ue4ss-version-update';
 
 export const DEFAULT_EXECUTABLE = 'Palworld.exe'; // path to executable, relative to game root
 export const XBOX_EXECUTABLE = 'gamelaunchhelper.exe';

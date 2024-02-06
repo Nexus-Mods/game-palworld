@@ -4,7 +4,7 @@ import semver from 'semver';
 import { fs, log, selectors, types, util } from 'vortex-api';
 import turbowalk, { IWalkOptions, IEntry } from 'turbowalk';
 
-import { UE4SS_PATH_PREFIX, GAME_ID, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, MOD_TYPE_UNREAL_PAK_TOOL } from './common';
+import { UE4SS_PATH_PREFIX, GAME_ID, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, MOD_TYPE_UNREAL_PAK_TOOL, NOTIF_ID_UE4SS_UPDATE } from './common';
 
 import { IPluginRequirement } from './types';
 
@@ -130,5 +130,5 @@ export async function walkPath(dirPath: string, walkOptions?: IWalkOptions): Pro
 
 export function dismissNotifications(api: types.IExtensionApi) {
   // We're not dismissing the downloader notifications intentionally.
-  [NOTIF_ID_BP_MODLOADER_DISABLED].forEach(id => api.dismissNotification(id));
+  [NOTIF_ID_BP_MODLOADER_DISABLED, NOTIF_ID_UE4SS_UPDATE].forEach(id => api.dismissNotification(id));
 }
