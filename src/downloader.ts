@@ -172,6 +172,13 @@ export async function getLatestGithubReleaseAsset(api: types.IExtensionApi, requ
   }
   try {
     const response = await axios.get(`${requirement.githubUrl}/releases/latest`);
+    const resHeaders = response.headers;
+    const callsRemaining = parseInt(util.getSafe(resHeaders, ['x-ratelimit-remaining'], '0'), 10);
+    if ([403, 404].includes(response?.status) && (callsRemaining === 0)) {
+        const resetDate = parseInt(util.getSafe(resHeaders, ['x-ratelimit-reset'], '0'), 10);
+        log('info', 'GitHub rate limit exceeded', { reset_at: (new Date(resetDate)).toString() });
+        return Promise.reject(new util.ProcessCanceled('GitHub rate limit exceeded'));
+    }
     if (response.status === 200) {
       const release: IGitHubRelease = response.data;
       if (release.assets.length > 0) {
@@ -197,5 +204,12 @@ export async function doDownload(downloadUrl: string, destination: string): Prom
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
     },
   });
+  const resHeaders = response.headers;
+  const callsRemaining = parseInt(util.getSafe(resHeaders, ['x-ratelimit-remaining'], '0'), 10);
+  if ([403, 404].includes(response?.status) && (callsRemaining === 0)) {
+    const resetDate = parseInt(util.getSafe(resHeaders, ['x-ratelimit-reset'], '0'), 10);
+    log('info', 'GitHub rate limit exceeded', { reset_at: (new Date(resetDate)).toString() });
+    return Promise.reject(new util.ProcessCanceled('GitHub rate limit exceeded'));
+  }
   await fs.writeFileAsync(destination, Buffer.from(response.data));
 }
