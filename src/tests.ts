@@ -26,8 +26,10 @@ export async function testBluePrintModManager(api: types.IExtensionApi, eventTyp
     await api.emitAndAwait('deploy-single-mod', GAME_ID, ue4ssMod.id);
     return;
   } else {
-    await download(api, PLUGIN_REQUIREMENTS);
-    ue4ssMod = await findModByFile(api, '', UE4SS_FILES[1]);
+    if (!ue4ssMod) {
+      await download(api, PLUGIN_REQUIREMENTS);
+      ue4ssMod = await findModByFile(api, '', UE4SS_FILES[1]);
+    }
   }
 
   const ue4ssRelPath = resolveUE4SSPath(api);
