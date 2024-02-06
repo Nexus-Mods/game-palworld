@@ -56,8 +56,13 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
           asset = await getLatestGithubReleaseAsset(api, req);
         }
         const tempPath = path.join(util.getVortexPath('temp'), asset.name);
-        await doDownload(asset.browser_download_url, tempPath);
-        await importAndInstall(api, tempPath, req.userFacingName);
+        try {
+          await doDownload(asset.browser_download_url, tempPath);
+          await importAndInstall(api, tempPath, req.userFacingName);
+        } catch (err) {
+          api.showErrorNotification('Failed to download requirements', err, { allowReport: false });
+          return;
+        }
       }
     }
   } catch (err) {
