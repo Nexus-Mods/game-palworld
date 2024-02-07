@@ -1,9 +1,8 @@
 /* eslint-disable */
 
 import path from 'path';
-import * as semver from 'semver';
 
-import { actions, fs, log, types, selectors, util } from 'vortex-api';
+import { fs, log, types, selectors, util } from 'vortex-api';
 
 import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
   PAK_MODSFOLDER_PATH, STEAMAPP_ID, XBOX_EXECUTABLE, XBOX_ID,
@@ -83,7 +82,7 @@ function main(context: types.IExtensionContext) {
     (gameId) => GAME_ID === gameId,
     () => undefined, // Don't deploy.
     testUnrealPakTool as any,
-    { deploymentEssential: false, name: 'Unreal Pak Tool' }
+    { deploymentEssential: false, name: 'Unreal Pak Tool', noConflicts: true }
   );
 
   // BP_PAK modType must have a lower priority than regular PAKs
