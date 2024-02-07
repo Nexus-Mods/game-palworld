@@ -24,7 +24,7 @@ export const BPPAK_MODSFOLDER_PATH = path.join('Pal', 'Content', 'Paks', 'LogicM
 
 export const LUA_EXTENSIONS = ['.lua'];
 export const PAK_EXTENSIONS = ['.pak', '.utoc', '.ucas'];
-export const IGNORE_CONFLICTS = ['ue4sslogicmod.info', '.ue4sslogicmod', '.logicmod'];
+export const IGNORE_CONFLICTS = ['enabled.txt', 'ue4sslogicmod.info', '.ue4sslogicmod', '.logicmod'];
 
 export const UE4SS_ENABLED_FILE = 'enabled.txt';
 export const XBOX_UE4SS_XINPUT_REPLACEMENT = 'xinput1_4.dll';

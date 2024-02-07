@@ -130,9 +130,9 @@ function main(context: types.IExtensionContext) {
 
       const installPath = selectors.installPathForGame(state, GAME_ID);
       const modPath = path.join(installPath, mod.installationPath);
-      const exists = await fs.statAsync(path.join(modPath, 'Enabled.txt')).then(() => true).catch(() => false);
+      const exists = await fs.statAsync(path.join(modPath, 'enabled.txt')).then(() => true).catch(() => false);
       if (!exists) {
-        await fs.writeFileAsync(path.join(modPath, 'Enabled.txt'), '', { encoding: 'utf8' });
+        await fs.writeFileAsync(path.join(modPath, 'enabled.txt'), '', { encoding: 'utf8' });
       }
     })
     context.api.events.on('gamemode-activated', () => onGameModeActivated(context.api));
