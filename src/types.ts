@@ -46,6 +46,9 @@ export interface IGithubDownload {
   url: string;
 }
 
+export type GamesMap = { [gameId: string]: ModsMap };
+export type ModsMap = { [modId: string]: types.IMod };
+
 export type PluginRequirements = { [storeId: string]: IPluginRequirement[] }
 export interface IPluginRequirement {
   archiveFileName: string;

@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ## [0.1.5] - 2024-02-07
 
 - Added "enabled.txt" to the ignore conflict list
+- Added new LUA modType which deploys to the root folder of UE4SS
+- LUAs are now added/removed from the mods.txt file upon mod installation/removal
+- Clean up
 
 ## [0.1.4] - 2024-02-05
 
