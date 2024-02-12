@@ -11,11 +11,6 @@ import { UE4SS_PATH_PREFIX, GAME_ID,
 
 import { IPluginRequirement } from './types';
 
-export function resolveUE4SSModsFilePath(api: types.IExtensionApi): string {
-  const ue4ssPath = resolveUE4SSPath(api);
-  return path.join(ue4ssPath, 'Mods', MODS_FILE);
-}
-
 export function resolveUE4SSPath(api: types.IExtensionApi): string {
   const state = api.getState();
   const discovery = selectors.discoveryByGame(state, GAME_ID);

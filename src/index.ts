@@ -168,20 +168,9 @@ function main(context: types.IExtensionContext) {
   );
 
   context.once(() => {
-    context.api.onStateChange(['persistent', 'mods'], async (prev: GamesMap, current: GamesMap) => {
-      const prevMods = prev[GAME_ID];
-      const currentMods = current[GAME_ID];
-      const prevLuas = _.filter(prevMods, (mod) => [MOD_TYPE_LUA, MOD_TYPE_LUA_V2].includes(mod.type));
-      const currentLuas = _.filter(currentMods, (mod) => [MOD_TYPE_LUA, MOD_TYPE_LUA_V2].includes(mod.type));
-      const added = _.difference(prevLuas, currentLuas);
-      const removed = _.difference(currentLuas, prevLuas);
-      for (const mod of added) {
-        await onAddMod(context.api, mod.id);
-      }
-      for (const mod of removed) {
-        await onAddMod(context.api, mod.id);
-      }
-    });
+    // context.api.events.on('did-install-mod', async (gameId: string, archiveId: string, modId: string) => onModsInstalled(context.api, gameId, [modId]));
+    context.api.events.on('mods-enabled', async (modIds: string[], enabled: boolean, gameId: string) => onModsEnabled(context.api, modIds, enabled, gameId));
+    context.api.onAsync('will-remove-mods', async (gameId: string, modIds: string[]) => onModsRemoved(context.api, gameId, modIds));
     // context.api.events.on('did-install-mod', async (gameId, archiveId, modId) => {
     //   if (gameId !== GAME_ID) {
     //     return;
@@ -231,6 +220,39 @@ async function setup(api: types.IExtensionApi, discovery: types.IDiscoveryResult
   }
 }
 
+async function onModsRemoved(api: types.IExtensionApi, gameId: string, modIds: string[]): Promise<void> {
+  if (gameId !== GAME_ID) {
+    return;
+  }
+  for (const modId of modIds) {
+    await onRemoveMod(api, modId);
+  }
+  return;
+}
+
+async function onModsInstalled(api: types.IExtensionApi, gameId: string, modIds: string[]): Promise<void> {
+  if (gameId !== GAME_ID) {
+    return;
+  }
+  const state = api.getState();
+  const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
+  for (const modId of modIds) {
+    const mod = mods[modId];
+    if ([MOD_TYPE_LUA, MOD_TYPE_LUA_V2].includes(mod?.type)) {
+      await onAddMod(api, modId);
+    } 
+  }
+  return;
+}
+
+async function onModsEnabled(api: types.IExtensionApi, modIds: string[], enabled: boolean, gameId: string) {
+  if (gameId !== GAME_ID) {
+    return;
+  }
+  const func = enabled ? onModsInstalled : onModsRemoved;
+  await func(api, gameId, modIds);
+}
+
 async function onGameModeActivated(api: types.IExtensionApi) {
   const state = api.getState();
   const activeGameId = selectors.activeGameId(state);
@@ -252,18 +274,28 @@ async function onGameModeActivated(api: types.IExtensionApi) {
 
 async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, deployment: types.IDeploymentManifest): Promise<void> {
   const state = api.getState();
-  const gameId = selectors.profileById(state, profileId)?.gameId;
+  const profile = selectors.profileById(state, profileId); 
+  const gameId = profile?.gameId;
   if (gameId !== GAME_ID) {
     return Promise.resolve();
   }
 
   try {
     await testBluePrintModManager(api, 'did-deploy');
+    await onDidDeployLuaEvent(api, profile);
   } catch (err) {
     log('warn', 'failed to test BluePrint Mod Manager', err);
   }
 
   return Promise.resolve();
+}
+
+async function onDidDeployLuaEvent(api: types.IExtensionApi, profile: types.IProfile): Promise<void> {
+  const modState = util.getSafe(profile, ['modState'], {});
+  const enabled = Object.keys(modState).filter((key) => modState[key].enabled);
+  const disabled = Object.keys(modState).filter((key) => !modState[key].enabled);
+  await onModsInstalled(api, profile.gameId, enabled);
+  await onModsRemoved(api, profile.gameId, disabled);
 }
 
 async function onWillPurgeEvent(api: types.IExtensionApi, profileId: string): Promise<void> {

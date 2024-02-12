@@ -29,7 +29,7 @@ export async function installUE4SSInjector(api: types.IExtensionApi, files: stri
         ? path.join(targetPath, XBOX_UE4SS_XINPUT_REPLACEMENT)
         : path.join(targetPath, iter);
 
-      if (iter === MODS_FILE) {
+      if (path.basename(iter) === MODS_FILE) {
         const modsData: string = await fs.readFileAsync(path.join(destinationPath, iter), { encoding: 'utf8' });
         const modsInstr: types.IInstruction = {
           type: 'generatefile',
@@ -84,8 +84,14 @@ export async function installLuaMod(api: types.IExtensionApi, files: string[], d
   luaFiles.sort((a, b) => a.length - b.length);
   const shortest = luaFiles[0];
   const segments = shortest.split(path.sep);
-  const parentDirectory = segments.length > 1 ? '' : path.basename(destinationPath);
-  const folderId = parentDirectory ?? destinationPath;
+
+  const modsSegmentIdx = segments.map(seg => !!seg && seg.toLowerCase()).indexOf('mods');
+  const folderId = (modsSegmentIdx !== -1)
+    ? segments[modsSegmentIdx + 1]
+    : (segments.length > 1)
+      ? segments[0]
+      : path.basename(destinationPath, '.installing');
+
   const attrInstr: types.IInstruction = {
     type: 'attribute',
     key: 'palworldFolderId',
@@ -96,7 +102,13 @@ export async function installLuaMod(api: types.IExtensionApi, files: string[], d
       // Get rid of directories
       return accum;
     }
-    const destination = parentDirectory ? path.join(parentDirectory, 'Mods', iter) : path.join('Mods', iter);
+    const fileSegments = iter.split(path.sep);
+    const destination = (modsSegmentIdx !== -1)
+      ? path.join(fileSegments.slice(modsSegmentIdx).join(path.sep))
+      : (fileSegments.length > 1)
+        ? path.join('Mods', folderId, fileSegments.slice(1).join(path.sep))
+        : path.join('Mods', folderId, iter);
+
     const instruction: types.IInstruction = {
       type: 'copy',
       source: iter,
