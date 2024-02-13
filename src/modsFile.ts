@@ -21,8 +21,15 @@ export async function onRemoveMod(api: types.IExtensionApi, modId: string) {
 }
 
 async function esureModsFileEntryAdded(api: types.IExtensionApi, modId: string) {
-  // regardless of what happens next, the mods file needs to be updated.
-  const ue4ssModsFile = await ensureModsFile(api);
+  let ue4ssModsFile;
+  try {
+    ue4ssModsFile = await ensureModsFile(api);
+  } catch (err) {
+    if (err instanceof util.NotFound) {
+      // If UE4SS isn't installed - there's not much we can do.
+      return;
+    }
+  }
   const state = api.getState();
   const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
   const mod = mods[modId];
@@ -43,7 +50,15 @@ async function esureModsFileEntryAdded(api: types.IExtensionApi, modId: string) 
 // Obviously ensure you call this function while the mod entry is still installed!!
 async function esureModsFileEntryRemoved(api: types.IExtensionApi, modId: string) {
   // regardless of what happens next, the mods file needs to be updated.
-  const ue4ssModsFile = await ensureModsFile(api);
+  let ue4ssModsFile;
+  try {
+    ue4ssModsFile = await ensureModsFile(api);
+  } catch (err) {
+    if (err instanceof util.NotFound) {
+      // If UE4SS isn't installed - there's not much we can do.
+      return;
+    }
+  }
   const state = api.getState();
   const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
   const mod = mods[modId];

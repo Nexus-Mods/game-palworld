@@ -5,6 +5,8 @@ import path from 'path';
 import { MODS_FILE_BACKUP, GAME_ID, UE4SS_2_5_2_FILES, UE4SS_SETTINGS_FILE,
   UE4SS_PATH_PREFIX, XBOX_UE4SS_XINPUT_REPLACEMENT, UE4SS_DWMAPI, MODS_FILE, LUA_EXTENSIONS } from './common';
 
+import { getTopLevelPatterns } from './stopPatterns';
+
 //#region UE4SS Installer and test.
 export async function testUE4SSInjector(files: string[], gameId: string): Promise<types.ISupportedResult> {
   const supported = gameId === GAME_ID && files.some(file => file.toLowerCase() === UE4SS_SETTINGS_FILE.toLowerCase());
@@ -117,6 +119,49 @@ export async function installLuaMod(api: types.IExtensionApi, files: string[], d
     accum.push(instruction);
     return accum;
   }, [attrInstr]);
+  return Promise.resolve({ instructions });
+}
+//#endregion
+
+//#region root mod
+export async function testRootMod(files: string[], gameId: string): Promise<types.ISupportedResult> {
+  const rightGame = gameId === GAME_ID;
+  const runThroughPatterns = (patterns: string[]) => {
+    for (const pattern of patterns) {
+      const regex = new RegExp(pattern, 'i');
+      for (const file of files) {
+        const normal = file.replace(/\\/g, '/');
+        if (regex.test(normal)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  const rightStructure = runThroughPatterns(getTopLevelPatterns(true));
+  return Promise.resolve({ supported: rightGame && rightStructure, requiredFiles: [] });
+}
+
+export async function installRootMod(api: types.IExtensionApi, files: string[], destinationPath: string, gameId: string): Promise<types.IInstallResult> {
+  const setModInstr: types.IInstruction = {
+    type: 'setmodtype',
+    value: '',
+  };
+  // I guess that if we're hear - that means that we can just copy the files over?
+  const instructions = files.reduce((accum, iter) => {
+    if (path.extname(iter) === '') {
+      // No directories
+      return accum;
+    }
+    const instr: types.IInstruction = {
+      type: 'copy',
+      source: iter,
+      destination: iter,
+    }
+    accum.push(instr);
+    return accum;
+  }, [setModInstr]);
+
   return Promise.resolve({ instructions });
 }
 //#endregion

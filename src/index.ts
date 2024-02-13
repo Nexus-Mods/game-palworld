@@ -17,7 +17,7 @@ import {
   getBPPakPath, getPakPath, testBPPakPath, testPakPath, testUnrealPakTool,
   getLUAPath, testLUAPath, getLUAPathV2, testLUAPathV2,
 } from './modTypes';
-import { installLuaMod, installUE4SSInjector, testLuaMod, testUE4SSInjector } from './installers';
+import { installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector } from './installers';
 import { testBluePrintModManager, testUE4SSVersion } from './tests';
 
 import { migrate } from './migrations';
@@ -115,7 +115,13 @@ function main(context: types.IExtensionContext) {
   context.registerInstaller('palworld-ue4ss', 10, testUE4SSInjector as any,
     (files, destinationPath, gameId) => installUE4SSInjector(context.api, files, destinationPath, gameId) as any);
 
-  context.registerInstaller('palworld-lua-installer', 10, testLuaMod as any,
+  // Runs after UE4SS to ensure that we don't accidentally install UE4SS as a root mod.
+  //  But must run before lua and pak installers to ensure we don't install a root mod
+  //  as a lua mod.
+  context.registerInstaller('palworld-root-mod', 15, testRootMod as any,
+    (files, destinationPath, gameId) => installRootMod(context.api, files, destinationPath, gameId) as any);
+
+  context.registerInstaller('palworld-lua-installer', 30, testLuaMod as any,
     (files, destinationPath, gameId) => installLuaMod(context.api, files, destinationPath, gameId) as any);
 
   context.registerModType(
