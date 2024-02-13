@@ -296,12 +296,30 @@ async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, dep
   return Promise.resolve();
 }
 
+const isLuaMod = (mod: types.IMod) => {
+  if (!mod?.type) {
+    return false;
+  }
+  return [MOD_TYPE_LUA, MOD_TYPE_LUA_V2].includes(mod.type);
+}
+
 async function onDidDeployLuaEvent(api: types.IExtensionApi, profile: types.IProfile): Promise<void> {
+  const state = api.getState();
+  const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
   const modState = util.getSafe(profile, ['modState'], {});
-  const enabled = Object.keys(modState).filter((key) => modState[key].enabled);
-  const disabled = Object.keys(modState).filter((key) => !modState[key].enabled);
+  const enabled = Object.keys(modState).filter((key) => isLuaMod(mods?.[key]) && modState[key].enabled);
+  const disabled = Object.keys(modState).filter((key) => isLuaMod(mods?.[key]) && !modState[key].enabled);
   await onModsInstalled(api, profile.gameId, enabled);
   await onModsRemoved(api, profile.gameId, disabled);
+}
+
+async function onDidPurgeLuaEvent(api: types.IExtensionApi, profile: types.IProfile): Promise<void> {
+  const state = api.getState();
+  const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
+  const modState = util.getSafe(profile, ['modState'], {});
+  const enabled = Object.keys(modState).filter((key) => isLuaMod(mods?.[key]) && modState[key].enabled);
+  const disabled = Object.keys(modState).filter((key) => isLuaMod(mods?.[key]) && !modState[key].enabled);
+  await onModsRemoved(api, profile.gameId, [].concat(enabled, disabled));
 }
 
 async function onWillPurgeEvent(api: types.IExtensionApi, profileId: string): Promise<void> {
@@ -309,7 +327,20 @@ async function onWillPurgeEvent(api: types.IExtensionApi, profileId: string): Pr
 }
 
 async function onDidPurgeEvent(api: types.IExtensionApi, profileId: string): Promise<void> {
-  return;
+  const state = api.getState();
+  const profile = selectors.profileById(state, profileId); 
+  const gameId = profile?.gameId;
+  if (gameId !== GAME_ID) {
+    return Promise.resolve();
+  }
+
+  try {
+    await onDidPurgeLuaEvent(api, profile);
+  } catch (err) {
+    log('warn', 'failed to remove lua entries from mods.txt', err);
+  }
+
+  return Promise.resolve();
 }
 
 async function onWillDeployEvent(api: types.IExtensionApi, profileId: any, deployment: types.IDeploymentManifest): Promise<void> {
