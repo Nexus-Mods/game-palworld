@@ -3,7 +3,7 @@ import path from 'path';
 import semver from 'semver';
 import { fs, log, types, selectors, actions } from 'vortex-api';
 
-import { GAME_ID, NAMESPACE, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, UE4SS_ENABLED_FILE, UE4SS_FILES } from './common';
+import { GAME_ID, NAMESPACE, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, UE4SS_ENABLED_FILE, UE4SS_SETTINGS_FILE } from './common';
 import { EventType } from './types';
 import { findModByFile, resolveUE4SSPath } from './util';
 import { download, getLatestGithubReleaseAsset } from './downloader';
@@ -56,7 +56,7 @@ export async function testBluePrintModManager(api: types.IExtensionApi, eventTyp
     return;
   }
 
-  let ue4ssMod = await findModByFile(api, '', UE4SS_FILES[1]);
+  let ue4ssMod = await findModByFile(api, '', UE4SS_SETTINGS_FILE);
   if (eventType === 'gamemode-activated') {
     // It's possible that the ue4ssMod didn't have a chance to install yet.
     //  Especially if the user just started to mod the game.
@@ -71,7 +71,7 @@ export async function testBluePrintModManager(api: types.IExtensionApi, eventTyp
   } else {
     if (!ue4ssMod) {
       await download(api, PLUGIN_REQUIREMENTS);
-      ue4ssMod = await findModByFile(api, '', UE4SS_FILES[1]);
+      ue4ssMod = await findModByFile(api, '', UE4SS_SETTINGS_FILE);
     }
   }
 
@@ -165,7 +165,7 @@ async function disableArrayCache(api: types.IExtensionApi, ue4ssMod: types.IMod)
   const stagingFolder = selectors.installPathForGame(state, GAME_ID);
   const modPath = path.join(stagingFolder, ue4ssMod.installationPath);
   const ue4ssRelPath = resolveUE4SSPath(api);
-  const ue4ssConfigPath = path.join(modPath, ue4ssRelPath, UE4SS_FILES[1]);
+  const ue4ssConfigPath = path.join(modPath, ue4ssRelPath, UE4SS_SETTINGS_FILE);
   const data: string = await fs.readFileAsync(ue4ssConfigPath, { encoding: 'utf8' });
   const newData = data.replace(/bUseUObjectArrayCache = true/gm, 'bUseUObjectArrayCache = false');
   await fs.removeAsync(ue4ssConfigPath).catch(err => null);

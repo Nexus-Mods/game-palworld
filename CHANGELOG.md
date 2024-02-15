@@ -6,7 +6,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [0.1.5] - 2024-02-07
 
+- Added a root mod installer for mods that contain a valid folder structure resembling the game.
 - Added "enabled.txt" to the ignore conflict list
+- Added new LUA modType which deploys to the root folder of UE4SS
+- LUAs are now added/removed from the mods.txt file upon mod installation/removal
+- Added 'Open...' menu entries for the different root folders
 
 ## [0.1.4] - 2024-02-05
 

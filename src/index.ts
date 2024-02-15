@@ -1,20 +1,32 @@
 /* eslint-disable */
-
+import * as _ from 'lodash';
 import path from 'path';
 
 import { fs, log, types, selectors, util } from 'vortex-api';
 
 import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
   PAK_MODSFOLDER_PATH, STEAMAPP_ID, XBOX_EXECUTABLE, XBOX_ID,
-  PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA, MOD_TYPE_BP_PAK, BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, } from './common';
+  PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA, MOD_TYPE_BP_PAK,
+  BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, IGNORE_DEPLOY, MOD_TYPE_LUA_V2,
+} from './common';
+
+import { settingsReducer } from './reducers';
 
 import { getStopPatterns } from './stopPatterns';
-import { getBPPakPath, getLUAPath, getPakPath, testBPPakPath, testLUAPath, testPakPath, testUnrealPakTool } from './modTypes';
-import { installUE4SSInjector, testUE4SSInjector } from './installers';
+import {
+  getBPPakPath, getPakPath, testBPPakPath, testPakPath, testUnrealPakTool,
+  getLUAPath, testLUAPath, getLUAPathV2, testLUAPathV2,
+} from './modTypes';
+import { installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector } from './installers';
 import { testBluePrintModManager, testUE4SSVersion } from './tests';
 
+import { migrate } from './migrations';
+
 import { dismissNotifications, resolveUE4SSPath } from './util';
-import { download, getLatestGithubReleaseAsset } from './downloader';
+import { download } from './downloader';
+import { GamesMap, ModsMap } from './types';
+
+import { onAddMod, onRemoveMod } from './modsFile';
 
 const supportedTools: types.ITool[] = [];
 
@@ -51,6 +63,7 @@ function getExecutable(discoveryPath) {
 }
 
 function main(context: types.IExtensionContext) {
+  context.registerReducer(['settings', 'palworld', 'migrations'], settingsReducer);
   // register a whole game, basic metadata and folder paths
   context.registerGame({
     id: GAME_ID,
@@ -65,16 +78,51 @@ function main(context: types.IExtensionContext) {
     supportedTools,
     requiresLauncher: requiresLauncher as any,
     details: {
+      customOpenModsPath: PAK_MODSFOLDER_PATH,
       supportsSymlinks: true,
       steamAppId: parseInt(STEAMAPP_ID),
       stopPatterns: getStopPatterns(),
-      //ignoreDeploy: IGNORE_DEPLOY,
+      ignoreDeploy: IGNORE_DEPLOY,
       ignoreConflicts: IGNORE_CONFLICTS
     },
   });
 
+  context.registerAction('mod-icons', 300, 'open-ext', {},
+                         'Open Logic Mods Folder', () => {
+    const state = context.api.getState();
+    const discovery = selectors.discoveryByGame(state, GAME_ID);
+    const logicModsPath = path.join(discovery.path, BPPAK_MODSFOLDER_PATH);
+    util.opn(logicModsPath).catch(() => null);
+  }, () => {
+    const state = context.api.getState();
+    const gameId = selectors.activeGameId(state);
+    return gameId === GAME_ID;
+  });
+
+  context.registerAction('mod-icons', 300, 'open-ext', {},
+                         'Open LUA Mods Folder', () => {
+    const state = context.api.getState();
+    const discovery = selectors.discoveryByGame(state, GAME_ID);
+    const ue4ssPath = resolveUE4SSPath(context.api);
+    const openPath = path.join(discovery.path, ue4ssPath, 'Mods');
+    util.opn(openPath).catch(() => null);
+  }, () => {
+    const state = context.api.getState();
+    const gameId = selectors.activeGameId(state);
+    return gameId === GAME_ID;
+  });
+
   context.registerInstaller('palworld-ue4ss', 10, testUE4SSInjector as any,
     (files, destinationPath, gameId) => installUE4SSInjector(context.api, files, destinationPath, gameId) as any);
+
+  // Runs after UE4SS to ensure that we don't accidentally install UE4SS as a root mod.
+  //  But must run before lua and pak installers to ensure we don't install a root mod
+  //  as a lua mod.
+  context.registerInstaller('palworld-root-mod', 15, testRootMod as any,
+    (files, destinationPath, gameId) => installRootMod(context.api, files, destinationPath, gameId) as any);
+
+  context.registerInstaller('palworld-lua-installer', 30, testLuaMod as any,
+    (files, destinationPath, gameId) => installLuaMod(context.api, files, destinationPath, gameId) as any);
 
   context.registerModType(
     MOD_TYPE_UNREAL_PAK_TOOL,
@@ -106,6 +154,16 @@ function main(context: types.IExtensionContext) {
     { deploymentEssential: true, name: 'Pak Mod' }
   );
 
+  // V2 mod type has precedence.
+  context.registerModType(
+    MOD_TYPE_LUA_V2,
+    9,
+    (gameId) => GAME_ID === gameId,
+    (game: types.IGame) => getLUAPathV2(context.api, game),
+    testLUAPathV2 as any,
+    { deploymentEssential: true, name: 'LUA Mod V2' }
+  );
+
   context.registerModType(
     MOD_TYPE_LUA,
     10,
@@ -116,25 +174,28 @@ function main(context: types.IExtensionContext) {
   );
 
   context.once(() => {
-    context.api.events.on('did-install-mod', async (gameId, archiveId, modId) => {
-      if (gameId !== GAME_ID) {
-        return;
-      }
+    // context.api.events.on('did-install-mod', async (gameId: string, archiveId: string, modId: string) => onModsInstalled(context.api, gameId, [modId]));
+    context.api.events.on('mods-enabled', async (modIds: string[], enabled: boolean, gameId: string) => onModsEnabled(context.api, modIds, enabled, gameId));
+    context.api.onAsync('will-remove-mods', async (gameId: string, modIds: string[]) => onModsRemoved(context.api, gameId, modIds));
+    // context.api.events.on('did-install-mod', async (gameId, archiveId, modId) => {
+    //   if (gameId !== GAME_ID) {
+    //     return;
+    //   }
 
-      const state = context.api.getState();
-      const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', gameId], {});
-      const mod = mods?.[modId];
-      if (mod.type !== MOD_TYPE_LUA) {
-        return;
-      }
+    //   const state = context.api.getState();
+    //   const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', gameId], {});
+    //   const mod = mods?.[modId];
+    //   if (mod.type !== MOD_TYPE_LUA) {
+    //     return;
+    //   }
 
-      const installPath = selectors.installPathForGame(state, GAME_ID);
-      const modPath = path.join(installPath, mod.installationPath);
-      const exists = await fs.statAsync(path.join(modPath, 'enabled.txt')).then(() => true).catch(() => false);
-      if (!exists) {
-        await fs.writeFileAsync(path.join(modPath, 'enabled.txt'), '', { encoding: 'utf8' });
-      }
-    })
+    //   const installPath = selectors.installPathForGame(state, GAME_ID);
+    //   const modPath = path.join(installPath, mod.installationPath);
+    //   const exists = await fs.statAsync(path.join(modPath, 'enabled.txt')).then(() => true).catch(() => false);
+    //   if (!exists) {
+    //     await fs.writeFileAsync(path.join(modPath, 'enabled.txt'), '', { encoding: 'utf8' });
+    //   }
+    // })
     context.api.events.on('gamemode-activated', () => onGameModeActivated(context.api));
     context.api.onAsync('will-deploy', (profileId: string, deployment: types.IDeploymentManifest) => onWillDeployEvent(context.api, profileId, deployment));
     context.api.onAsync('did-deploy', (profileId: string, deployment: types.IDeploymentManifest) => onDidDeployEvent(context.api, profileId, deployment));
@@ -152,13 +213,51 @@ async function setup(api: types.IExtensionApi, discovery: types.IDiscoveryResult
 
   // Make sure the folders exist
   const ensurePath = (filePath: string) => fs.ensureDirWritableAsync(path.join(discovery.path, filePath));
-  const UE4SSPath = resolveUE4SSPath(api);
-  await ensurePath(path.join(UE4SSPath, 'Mods'));
-  await ensurePath(PAK_MODSFOLDER_PATH);
-  await ensurePath(BPPAK_MODSFOLDER_PATH);
-  await download(api, PLUGIN_REQUIREMENTS);
+  try {
+    const UE4SSPath = resolveUE4SSPath(api);
+    await ensurePath(path.join(UE4SSPath, 'Mods'));
+    await ensurePath(PAK_MODSFOLDER_PATH);
+    await ensurePath(BPPAK_MODSFOLDER_PATH);
+    await migrate(api);
+    await download(api, PLUGIN_REQUIREMENTS);
+  } catch (err) {
+    api.showErrorNotification('Failed to setup Palworld extension', err);
+    return;
+  }
 }
 
+async function onModsRemoved(api: types.IExtensionApi, gameId: string, modIds: string[]): Promise<void> {
+  if (gameId !== GAME_ID) {
+    return;
+  }
+  for (const modId of modIds) {
+    await onRemoveMod(api, modId);
+  }
+  return;
+}
+
+async function onModsInstalled(api: types.IExtensionApi, gameId: string, modIds: string[]): Promise<void> {
+  if (gameId !== GAME_ID) {
+    return;
+  }
+  const state = api.getState();
+  const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
+  for (const modId of modIds) {
+    const mod = mods[modId];
+    if ([MOD_TYPE_LUA, MOD_TYPE_LUA_V2].includes(mod?.type)) {
+      await onAddMod(api, modId);
+    } 
+  }
+  return;
+}
+
+async function onModsEnabled(api: types.IExtensionApi, modIds: string[], enabled: boolean, gameId: string) {
+  if (gameId !== GAME_ID) {
+    return;
+  }
+  const func = enabled ? onModsInstalled : onModsRemoved;
+  await func(api, gameId, modIds);
+}
 
 async function onGameModeActivated(api: types.IExtensionApi) {
   const state = api.getState();
@@ -181,13 +280,15 @@ async function onGameModeActivated(api: types.IExtensionApi) {
 
 async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, deployment: types.IDeploymentManifest): Promise<void> {
   const state = api.getState();
-  const gameId = selectors.profileById(state, profileId)?.gameId;
+  const profile = selectors.profileById(state, profileId); 
+  const gameId = profile?.gameId;
   if (gameId !== GAME_ID) {
     return Promise.resolve();
   }
 
   try {
     await testBluePrintModManager(api, 'did-deploy');
+    await onDidDeployLuaEvent(api, profile);
   } catch (err) {
     log('warn', 'failed to test BluePrint Mod Manager', err);
   }
@@ -195,12 +296,51 @@ async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, dep
   return Promise.resolve();
 }
 
+const isLuaMod = (mod: types.IMod) => {
+  if (!mod?.type) {
+    return false;
+  }
+  return [MOD_TYPE_LUA, MOD_TYPE_LUA_V2].includes(mod.type);
+}
+
+async function onDidDeployLuaEvent(api: types.IExtensionApi, profile: types.IProfile): Promise<void> {
+  const state = api.getState();
+  const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
+  const modState = util.getSafe(profile, ['modState'], {});
+  const enabled = Object.keys(modState).filter((key) => isLuaMod(mods?.[key]) && modState[key].enabled);
+  const disabled = Object.keys(modState).filter((key) => isLuaMod(mods?.[key]) && !modState[key].enabled);
+  await onModsInstalled(api, profile.gameId, enabled);
+  await onModsRemoved(api, profile.gameId, disabled);
+}
+
+async function onDidPurgeLuaEvent(api: types.IExtensionApi, profile: types.IProfile): Promise<void> {
+  const state = api.getState();
+  const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
+  const modState = util.getSafe(profile, ['modState'], {});
+  const enabled = Object.keys(modState).filter((key) => isLuaMod(mods?.[key]) && modState[key].enabled);
+  const disabled = Object.keys(modState).filter((key) => isLuaMod(mods?.[key]) && !modState[key].enabled);
+  await onModsRemoved(api, profile.gameId, [].concat(enabled, disabled));
+}
+
 async function onWillPurgeEvent(api: types.IExtensionApi, profileId: string): Promise<void> {
   return;
 }
 
 async function onDidPurgeEvent(api: types.IExtensionApi, profileId: string): Promise<void> {
-  return;
+  const state = api.getState();
+  const profile = selectors.profileById(state, profileId); 
+  const gameId = profile?.gameId;
+  if (gameId !== GAME_ID) {
+    return Promise.resolve();
+  }
+
+  try {
+    await onDidPurgeLuaEvent(api, profile);
+  } catch (err) {
+    log('warn', 'failed to remove lua entries from mods.txt', err);
+  }
+
+  return Promise.resolve();
 }
 
 async function onWillDeployEvent(api: types.IExtensionApi, profileId: any, deployment: types.IDeploymentManifest): Promise<void> {

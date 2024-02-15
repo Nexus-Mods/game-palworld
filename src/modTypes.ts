@@ -70,6 +70,31 @@ export async function testPakPath(api: types.IExtensionApi, instructions: types.
 }
 //#endregion
 
+//#region MOD_TYPE_LUA_V2
+export function getLUAPathV2(api: types.IExtensionApi, game: types.IGame) {
+  const discovery = selectors.discoveryByGame(api.getState(), game.id);
+  if (!discovery || !discovery.path) {
+    return '.';
+  }
+  const ue4ssPath = resolveUE4SSPath(api);
+  const luaPath = path.join(discovery.path, ue4ssPath);
+  return luaPath;
+}
+
+export function testLUAPathV2(instructions: types.IInstruction[]): Promise<boolean> {
+  if (hasModTypeInstruction(instructions)) {
+    return Promise.resolve(false);
+  }
+  // Pretty basic set up right now.
+  const filtered = instructions
+    .filter((inst: types.IInstruction) => (inst.type === 'copy')
+      && (LUA_EXTENSIONS.includes(path.extname(inst.source as any))));
+
+  const supported = filtered.length > 0;
+  return Promise.resolve(supported) as any;
+}
+//#endregion
+
 //#region MOD_TYPE_LUA
 export function getLUAPath(api: types.IExtensionApi, game: types.IGame) {
   const discovery = selectors.discoveryByGame(api.getState(), game.id);

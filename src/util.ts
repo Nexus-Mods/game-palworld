@@ -4,7 +4,10 @@ import semver from 'semver';
 import { fs, log, selectors, types, util } from 'vortex-api';
 import turbowalk, { IWalkOptions, IEntry } from 'turbowalk';
 
-import { UE4SS_PATH_PREFIX, GAME_ID, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, MOD_TYPE_UNREAL_PAK_TOOL, NOTIF_ID_UE4SS_UPDATE } from './common';
+import { UE4SS_PATH_PREFIX, GAME_ID,
+  NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS,
+  MOD_TYPE_UNREAL_PAK_TOOL, NOTIF_ID_UE4SS_UPDATE, MODS_FILE
+} from './common';
 
 import { IPluginRequirement } from './types';
 
@@ -126,6 +129,22 @@ export async function walkPath(dirPath: string, walkOptions?: IWalkOptions): Pro
     }, walkOptions).catch(err => err.code === 'ENOENT' ? Promise.resolve() : Promise.reject(err));
     return resolve(walkResults);
   });
+}
+
+// Staging folder file operations require the mod to be purged and re-deployed once the
+//  staging operation is complete. This function will remove the mod with the specified modId
+//  and run the specified function before re-deploying the mod.
+// IMPORTANT: all operations within the provided functor should ensure to only apply to the provided
+//  modId to ensure we avoid deployment corruption.
+export async function runStagingOperationOnMod(api: types.IExtensionApi, modId: string, func: (...args: any[]) => Promise<void>): Promise<void> {
+  try {
+    await api.emitAndAwait('deploy-single-mod', GAME_ID, modId, false);
+    await func(api, modId);
+    await api.emitAndAwait('deploy-single-mod', GAME_ID, modId);
+  } catch (err) {
+    api.showErrorNotification('Failed to run staging operation', err);
+    return;
+  }
 }
 
 export function dismissNotifications(api: types.IExtensionApi) {

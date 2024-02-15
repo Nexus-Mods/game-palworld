@@ -19,7 +19,7 @@ export function getStopPatterns(escape: boolean = false): string[] {
   const pakFilePatterns: string[] = PAK_EXTENSIONS.map((val, idx, arr) => extToWordExp(val.toLowerCase(), idx, arr, escape));
   const luaFilePatterns: string[] = LUA_EXTENSIONS.map((val, idx, arr) => extToWordExp(val.toLowerCase(), idx, arr, escape));
   const luaFolderPatterns: string[] = ['scripts'].map((val, idx, arr) => dirToWordExp(val.toLowerCase(), idx, arr, escape));
-  return [].concat(pakFilePatterns, luaFolderPatterns, luaFilePatterns);
+  return [].concat(getTopLevelPatterns(), pakFilePatterns, luaFolderPatterns, luaFilePatterns);
 }
 
 export function getTopLevelPatterns(escape: boolean = false): string[] {
