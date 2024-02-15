@@ -64,19 +64,19 @@ If a PAK mod is detected, it's deployment folder is `\Pal\Content\Paks\~mods`.
 
 ## Lua\UE4SS mods
 
-If a LUA mod is detected, it's deployment folder is `\Pal\Content\Paks\LogicMods`.
+If a LUA mod is detected, it's deployment folder is `\Pal\Binaries\Win64\Mods`.
 
-LUA mods are only detected by UE4SS if they contain an `enabled.txt` file in the mods root folder. For example, if `\Pal\Binaries\Win64\Mods\<MODFOLDER>\enabled.txt` doesn't exist, then it won't be loaded by UE4SS. Vortex does create this file if it doesn't exist during mod deployment.
+Starting in v0.1.5 of the Palworld Extension, Lua mods are now added to the `\Pal\Binaries\Win64\Mods\mods.txt` as the primary method for UE4SS detecting that the mod is installed and enabled.
 
-> Lua mods can also be detected by UE4SS if it has an entry in it's `\Pal\Binaries\Win64\Mods\mods.txt` file but it's more complicated for Vortex to manage this file and so the existence of `enabled.txt` is the better solution.
+> Previously, Vortex created an `enabled.txt` within the individual mods folder. This has since been proven to cause problems with collections and so now uses the above `mods.txt` method.
 
 ## Blueprint\Logic mods
 
-If a Blueprint\Logic mod is detected, it's deployment folder is `\Pal\Binaries\Win64\Mods`.
+If a Blueprint\Logic mod is detected, it's deployment folder is `\Pal\Content\Paks\LogicMods`. These mods are detected by reading the contents of the PAK file and looking at it's mount point. If this fails, then Vortex falls back to looking for the existence of a `LogicMods` folder within the archive.
 
 ## Unsupported mods
 
-Vortex doesn't officially support managing of mods that are reshades, save game\config edits or require external tools (apart from UE4SS). 
+Vortex doesn't officially support managing of mods that are reshades, save game\config edits or require external tools (apart from UE4SS and UnrealPakTool). 
 
 # Known Issues
 
@@ -93,7 +93,9 @@ Vortex doesn't officially support managing of mods that are reshades, save game\
 
 - The [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) team for doing an amazing job.
 - [UnrealPakTool](https://github.com/allcoolthingsatoneplace/UnrealPakTool) for enabling us peek inside the PAK files.
-- [Khejanin](https://github.com/Khejanin) (Palworld Modding Discord) for helping with PAK type detection. 
+#### Palworld Modding Discord
+- [Khejanin](https://github.com/Khejanin) for helping with PAK type detection. 
+- Êçhëłøñ for some great deep dives into mod types and patterns.
 
 # Changelog
 
