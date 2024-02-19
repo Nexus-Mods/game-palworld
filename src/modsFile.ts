@@ -29,6 +29,7 @@ async function esureModsFileEntryAdded(api: types.IExtensionApi, modId: string) 
       // If UE4SS isn't installed - there's not much we can do.
       return;
     }
+    throw err;
   }
   const state = api.getState();
   const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
@@ -58,6 +59,7 @@ async function esureModsFileEntryRemoved(api: types.IExtensionApi, modId: string
       // If UE4SS isn't installed - there's not much we can do.
       return;
     }
+    throw err;
   }
   const state = api.getState();
   const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
