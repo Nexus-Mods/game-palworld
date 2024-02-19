@@ -92,8 +92,7 @@ Vortex doesn't officially support managing of mods that are reshades, save game\
 # Thanks
 
 - The [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) team for doing an amazing job.
-- [UnrealPakTool](https://github.com/allcoolthingsatoneplace/UnrealPakTool) for enabling us peek inside the PAK files.
-#### Palworld Modding Discord
+- [UnrealPakTool](https://github.com/allcoolthingsatoneplace/UnrealPakTool) for enabling us to peek inside the PAK files.
 - [Khejanin](https://github.com/Khejanin) for helping with PAK type detection. 
 - Êçhëłøñ for help with testing and performing some great deep dives into mod types and patterns.
 
