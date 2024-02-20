@@ -100,8 +100,8 @@ export async function installLuaMod(api: types.IExtensionApi, files: string[], d
     value: folderId,
   }
   const instructions = files.reduce((accum, iter) => {
-    if (path.extname(iter) === '') {
-      // Get rid of directories
+    if (iter.endsWith(path.sep) || path.extname(iter) === '') {
+      // No directories
       return accum;
     }
     const fileSegments = iter.split(path.sep);
@@ -149,7 +149,7 @@ export async function installRootMod(api: types.IExtensionApi, files: string[], 
   };
   // I guess that if we're hear - that means that we can just copy the files over?
   const instructions = files.reduce((accum, iter) => {
-    if (path.extname(iter) === '') {
+    if (iter.endsWith(path.sep) || path.extname(iter) === '') {
       // No directories
       return accum;
     }
