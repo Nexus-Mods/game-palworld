@@ -43,6 +43,7 @@ export async function testPakPath(api: types.IExtensionApi, instructions: types.
   if (hasModTypeInstruction(instructions)) {
     return Promise.resolve(false);
   }
+  /*
   try {
     const modType = await runPakTool(api, instructions);
     if (modType && modType === MOD_TYPE_PAK) {
@@ -51,7 +52,7 @@ export async function testPakPath(api: types.IExtensionApi, instructions: types.
   } catch (err) {
     // Pak tool fudged up - resume default stop pattern installation.
     log('error', 'Failed to ascertain modType using pak tool', err);
-  }
+  }*/
   const filteredPaks = instructions
     .filter((inst: types.IInstruction) => (inst.type === 'copy')
       && (PAK_EXTENSIONS.includes(path.extname(inst.source as any))));

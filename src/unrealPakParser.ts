@@ -5,9 +5,10 @@ import { log, types, util } from 'vortex-api'
 
 import { MOD_TYPE_BP_PAK, MOD_TYPE_PAK, UE_PAK_TOOL_FILES } from './common';
 import { IPakExtractionInfo } from './types';
-import { resolveUnrealPakToolPath } from './util';
+import { formatBytes, resolveUnrealPakToolPath } from './util';
 
 const DEFAULT_BLUEPRINT_SEGMENT = 'mods';
+const INCREASED_MAX_BUFFER_SIZE = 1024 * 1024 * 10; // 10MB - default is 1MB, max we've come across as needing is 4MB
 
 function normalizePath(filePath: string): string {
   const trimmed = filePath.replace(/\//g, path.sep);
@@ -76,17 +77,37 @@ function parsePakListLog(logText: string): IPakExtractionInfo | null {
   return extractionInfo;
 }
 
-export async function listPak(api: types.IExtensionApi, filePath: string): Promise<IPakExtractionInfo | null> {
+export async function listPak(api: types.IExtensionApi, filePath: string, execOptions?: child_process.ExecOptions): Promise<IPakExtractionInfo | null> {
   const unrealPakToolToolPath = await resolveUnrealPakToolPath(api);
   if (!unrealPakToolToolPath) {
     return Promise.reject(new util.NotFound('UnrealPakTool'));
   }
   const execPath = path.join(unrealPakToolToolPath, 'UnrealPakTool', UE_PAK_TOOL_FILES[0]);
-  const command = `${execPath} "${filePath}" -list`;
+  const command = `"${execPath}" "${filePath}" -list`;
   return new Promise<IPakExtractionInfo | null>((resolve, reject) => {
-    child_process.exec(command, (error, stdout, stderr) => {
+    child_process.exec(command, execOptions, async (error, stdout, stderr) => {
       if (error) {
         log('error', `Error listing ${filePath}: ${error.message}`);
+
+        // if max buffer error, try again with a new max buffer size
+        if(error.code.toString() === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {          
+
+          // if we've already tried again with a larger buffer, give up
+          if(execOptions !== undefined) {
+            log('error', `Already tried again with a larger buffer, giving up.`);
+            return reject(new Error(error.message))              
+          }        
+
+          log('info', `Trying again with an increased buffer size (${formatBytes(INCREASED_MAX_BUFFER_SIZE)}) ${filePath}`);
+          // try again with 10mb buffer
+          try {
+            const res = await listPak(api, filePath, {maxBuffer: INCREASED_MAX_BUFFER_SIZE}); 
+            return resolve(res);   
+          } catch (err) {
+            return reject(err);
+          }
+        }
+
         return reject(new Error(error.message));
       }
       if (stderr) {
