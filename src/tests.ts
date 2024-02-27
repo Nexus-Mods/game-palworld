@@ -94,8 +94,10 @@ export async function testBluePrintModManager(api: types.IExtensionApi, eventTyp
 async function reinstallUE4SS(api: types.IExtensionApi, ue4ssMod: types.IMod, bpModLoaderPath: string): Promise<void> {
   const autoFix = async () => {
     try {
-      await download(api, PLUGIN_REQUIREMENTS, true);
-      await enableBPModLoader(api, ue4ssMod, bpModLoaderPath);
+      await download(api, [PLUGIN_REQUIREMENTS[0]], true);
+      // We've re-downloaded ue4ss, so we need to find it again.
+      ue4ssMod = await PLUGIN_REQUIREMENTS[0].findMod(api);
+      // await enableBPModLoader(api, ue4ssMod, bpModLoaderPath);
     } catch (err) {
       api.showErrorNotification('Failed to re-install UE4SS', err);
       return;

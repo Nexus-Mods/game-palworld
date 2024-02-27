@@ -8,6 +8,7 @@ import axios from 'axios';
 
 import { GAME_ID, NOTIF_ID_REQUIREMENTS } from './common';
 import { IPluginRequirement, IGitHubAsset, IGitHubRelease } from './types';
+import { onRemoveMod } from './modsFile';
 
 
 export async function download(api: types.IExtensionApi, requirements: IPluginRequirement[], force?: boolean) {
@@ -26,7 +27,7 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
       let asset;
       let versionMismatch = false;
       const mod = await req.findMod(api);
-      if (!!mod && req.resolveVersion) {
+      if (!!mod && req.resolveVersion && force !== true) {
         // Ensure it's the right version.
         const version = await req.resolveVersion(api);
         asset = await getLatestGithubReleaseAsset(api, req);
@@ -57,6 +58,10 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
         }
         const tempPath = path.join(util.getVortexPath('temp'), asset.name);
         try {
+          if (force && !!mod) {
+            // We're force downloading - make sure we disable (and remove?) any existing requirement.
+            await removeExistingReq(api, req);
+          }
           await doDownload(asset.browser_download_url, tempPath);
           await importAndInstall(api, tempPath, req.userFacingName);
         } catch (err) {
@@ -115,6 +120,22 @@ async function importAndInstall(api: types.IExtensionApi, filePath: string, name
         return resolve();
       } catch (err) {
         return reject(err);
+      }
+    });
+  })
+}
+
+async function removeExistingReq(api: types.IExtensionApi, requirement: IPluginRequirement) {
+  return new Promise<void>(async (resolve, reject) => {
+    const mod = await requirement.findMod(api);
+    if (!mod) {
+      return resolve();
+    }
+    api.events.emit('remove-mods', GAME_ID, [mod.id], (err) => {
+      if (err !== null) {
+        return reject(err);
+      } else {
+        return resolve();
       }
     });
   })
