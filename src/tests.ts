@@ -3,7 +3,7 @@ import path from 'path';
 import semver from 'semver';
 import { fs, log, types, selectors, actions } from 'vortex-api';
 
-import { GAME_ID, NAMESPACE, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, UE4SS_ENABLED_FILE, UE4SS_SETTINGS_FILE } from './common';
+import { GAME_ID, MODS_FILE_BACKUP, NAMESPACE, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, UE4SS_ENABLED_FILE, UE4SS_SETTINGS_FILE } from './common';
 import { EventType } from './types';
 import { findModByFile, resolveUE4SSPath } from './util';
 import { download, getLatestGithubReleaseAsset } from './downloader';
@@ -80,7 +80,8 @@ export async function testBluePrintModManager(api: types.IExtensionApi, eventTyp
   const ue4ssInstallPath = path.join(installPath, ue4ssMod.installationPath);
   const bpModLoaderPath = path.join(ue4ssInstallPath, ue4ssRelPath, 'Mods', 'BPModLoaderMod');
   const modLoaderExists = await fs.statAsync(bpModLoaderPath).then(() => true).catch(() => false);
-  if (!modLoaderExists) {
+  const hasBackupFile = await fs.statAsync(path.join(ue4ssInstallPath, MODS_FILE_BACKUP)).then(() => true).catch(() => false);
+  if (!modLoaderExists || !hasBackupFile) {
     await reinstallUE4SS(api, ue4ssMod, bpModLoaderPath);
     return;
   }
@@ -93,8 +94,10 @@ export async function testBluePrintModManager(api: types.IExtensionApi, eventTyp
 async function reinstallUE4SS(api: types.IExtensionApi, ue4ssMod: types.IMod, bpModLoaderPath: string): Promise<void> {
   const autoFix = async () => {
     try {
-      await download(api, PLUGIN_REQUIREMENTS, true);
-      await enableBPModLoader(api, ue4ssMod, bpModLoaderPath);
+      await download(api, [PLUGIN_REQUIREMENTS[0]], true);
+      // We've re-downloaded ue4ss, so we need to find it again.
+      ue4ssMod = await PLUGIN_REQUIREMENTS[0].findMod(api);
+      // await enableBPModLoader(api, ue4ssMod, bpModLoaderPath);
     } catch (err) {
       api.showErrorNotification('Failed to re-install UE4SS', err);
       return;

@@ -147,7 +147,7 @@ export async function installRootMod(api: types.IExtensionApi, files: string[], 
     type: 'setmodtype',
     value: '',
   };
-  // I guess that if we're hear - that means that we can just copy the files over?
+  // I guess that if we're here - that means that we can just copy the files over?
   const instructions = files.reduce((accum, iter) => {
     if (iter.endsWith(path.sep) || path.extname(iter) === '') {
       // No directories

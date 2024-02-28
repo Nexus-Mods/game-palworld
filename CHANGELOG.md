@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.1.8] - 2024-02-27
+
+- Improved UE4SS test to ensure mods.txt.original is present (will inform user of corrupted UE4SS installation)
+
 ## [0.1.7] - 2024-02-20
 
 - If PAK reading fails due to max buffer exceeded, it is retried with a larger buffer 
