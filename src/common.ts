@@ -56,7 +56,6 @@ export type PakModType = 'palworld-pak-modtype' | 'palworld-blueprint-modtype';
 
 export const UE4SS_XINPUT_FILENAME = 'UE4SS_v3.0.0.zip';
 export const UE_PAK_TOOL_FILENAME = 'UnrealPakTool.zip';
-
 export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
   {
     archiveFileName: UE4SS_XINPUT_FILENAME,
@@ -66,7 +65,7 @@ export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
     githubUrl: 'https://api.github.com/repos/UE4SS-RE/RE-UE4SS',
     findMod: (api: types.IExtensionApi) => findModByFile(api, '', UE4SS_SETTINGS_FILE),
     findDownloadId: (api: types.IExtensionApi) => findDownloadIdByPattern(api, PLUGIN_REQUIREMENTS[0]),
-    fileArchivePattern: new RegExp(/^UE4SS.*v(\d+\.\d+\.\d+)/, 'i'),
+    fileArchivePattern: new RegExp(/^UE4SS.*v(\d+\.\d+\.\d+(-\w+(\.\d+)?)?)/, 'i'),
     resolveVersion: (api: types.IExtensionApi) => resolveVersionByPattern(api, PLUGIN_REQUIREMENTS[0]),
   },
   {

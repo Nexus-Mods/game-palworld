@@ -1,7 +1,7 @@
 /* eslint-disable */
 import path from 'path';
 import semver from 'semver';
-import { fs, log, types, selectors, actions } from 'vortex-api';
+import { fs, log, types, selectors, actions, util } from 'vortex-api';
 
 import { GAME_ID, MODS_FILE_BACKUP, NAMESPACE, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, UE4SS_ENABLED_FILE, UE4SS_SETTINGS_FILE } from './common';
 import { EventType } from './types';
@@ -13,8 +13,13 @@ export async function testUE4SSVersion(api: types.IExtensionApi, eventType?: Eve
   const requirement = PLUGIN_REQUIREMENTS[0];
   const currentVersion = await requirement.resolveVersion(api);
   const latest = await getLatestGithubReleaseAsset(api, requirement);
-  const coercedVersion = semver.coerce(latest.release.tag_name);
-  if (!semver.gt(coercedVersion.version, currentVersion)) {
+  const versionMatch = latest.name.match(/v?(\d+\.\d+\.\d+(-\w+(\.\d+)?)?)/);
+  if (!versionMatch) {
+    throw new Error('Unable to determine version from release asset');
+  }
+  const latestVersion = versionMatch[1];
+  const coercedVersion = util.semverCoerce(latestVersion, { includePrerelease: true});
+  if (coercedVersion.version === currentVersion || semver.satisfies(`^${coercedVersion.version}`, currentVersion, { includePrerelease: true })) {
     return;
   }
 
