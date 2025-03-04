@@ -1,14 +1,15 @@
 import path from 'path';
 import semver from 'semver';
-import { fs, selectors, types, util } from 'vortex-api';
+import { actions, fs, selectors, types, util } from 'vortex-api';
 
 import { setPalworldMigrationVersion } from './actions';
 
-import { GAME_ID, PLUGIN_REQUIREMENTS, MODS_FILE, MODS_FILE_BACKUP } from './common';
+import { GAME_ID, PLUGIN_REQUIREMENTS, MODS_FILE, MODS_FILE_BACKUP, MOD_TYPE_LUA_V2, UE4SS_PATH_PREFIX, MOD_TYPE_LUA } from './common';
 import { resolveUE4SSPath, runStagingOperationOnMod } from './util';
 
 const MIGRATIONS = {
   '0.1.5': migrate015,
+  '0.1.9': migrate019,
 };
 
 export async function migrate(api: types.IExtensionApi): Promise<void> {
@@ -35,6 +36,31 @@ export async function migrate(api: types.IExtensionApi): Promise<void> {
     api.showErrorNotification('Failed to migrate', err);
   }
 
+  return;
+}
+
+export async function migrate019(api: types.IExtensionApi): Promise<void> {
+  const state = api.getState();
+  const discovery = selectors.discoveryByGame(state, GAME_ID);
+  const architecture = discovery?.store === 'xbox' ? 'WinGDK' : 'Win64';
+  const oldPath = path.join(discovery.path, UE4SS_PATH_PREFIX, architecture, 'Mods');
+  const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
+  const batchedActions = [];
+  const oldPathExists = await fs.statAsync(oldPath).then(() => true).catch(() => false);
+  if (!oldPathExists) {
+    // Nothing to do here.
+    return;
+  }
+  await api.emitAndAwait('purge-mods-in-path', GAME_ID, MOD_TYPE_LUA_V2, oldPath);
+  await api.emitAndAwait('purge-mods-in-path', GAME_ID, MOD_TYPE_LUA, oldPath);
+  const luaMods = Object.values(mods)
+    .filter(mod => [MOD_TYPE_LUA, MOD_TYPE_LUA_V2].includes(mod.type));
+
+  for (const mod of luaMods) {
+    batchedActions.push(actions.setModType(GAME_ID, mod.id, MOD_TYPE_LUA_V2));
+  }
+  util.batchDispatch(api.store, batchedActions);
+  await util.toPromise(cb => api.events.emit('deploy-mods', cb));
   return;
 }
 

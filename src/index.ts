@@ -215,9 +215,11 @@ async function setup(api: types.IExtensionApi, discovery: types.IDiscoveryResult
   const ensurePath = (filePath: string) => fs.ensureDirWritableAsync(path.join(discovery.path, filePath));
   try {
     const UE4SSPath = resolveUE4SSPath(api);
-    await ensurePath(path.join(UE4SSPath, 'Mods'));
-    await ensurePath(PAK_MODSFOLDER_PATH);
-    await ensurePath(BPPAK_MODSFOLDER_PATH);
+    const oldSegments = UE4SSPath.split(path.sep);
+    oldSegments.pop();
+    oldSegments.push('Mods');
+    const oldScriptSystemPath = oldSegments.join(path.sep);
+    await Promise.all([path.join(UE4SSPath, 'Mods'), oldScriptSystemPath, PAK_MODSFOLDER_PATH, BPPAK_MODSFOLDER_PATH].map(ensurePath));
     await migrate(api);
     await download(api, PLUGIN_REQUIREMENTS);
   } catch (err) {
