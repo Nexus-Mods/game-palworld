@@ -34,6 +34,7 @@ export const IGNORE_DEPLOY = [MODS_FILE, MODS_FILE_BACKUP, UE4SS_ENABLED_FILE];
 
 export const UE4SS_DWMAPI = 'dwmapi.dll';
 export const XBOX_UE4SS_XINPUT_REPLACEMENT = 'xinput1_4.dll';
+export const UE4SS_MEMBER_VARIABLE_LAYOUT_FILE = 'MemberVariableLayout.ini';
 export const UE4SS_SETTINGS_FILE = 'UE4SS-settings.ini';
 export const UE4SS_2_5_2_FILES = ['xinput1_3.dll', UE4SS_SETTINGS_FILE];
 export const UE4SS_3_0_0_FILES = [UE4SS_DWMAPI, UE4SS_SETTINGS_FILE];

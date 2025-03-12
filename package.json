@@ -13,12 +13,13 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "copyassets": "copyfiles -f ./src/assets/** ./dist/",
-    "build": "npx webpack && yarn copyassets && node createinfojson.js && yarn packplugin && yarn copystyles",
+    "build": "npx webpack && yarn generatemembervariablelayout && yarn copyassets && node createinfojson.js && yarn packplugin && yarn copystyles",
     "buildcopydev": "yarn build && yarn copyplugindev",
     "copystyles": "node copystyles.js",
     "copyplugin": "node copyplugin.js",
     "copyplugindev": "node copyplugin.js -dev",
-    "packplugin": "node packageplugin.js"
+    "packplugin": "node packageplugin.js",
+    "generatemembervariablelayout": "node generatemembervariablelayout.js"
   },
   "license": "GPLV3",
   "devDependencies": {
