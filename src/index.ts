@@ -18,7 +18,7 @@ import {
   getLUAPath, testLUAPath, getLUAPathV2, testLUAPathV2,
 } from './modTypes';
 import { installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector } from './installers';
-import { testBluePrintModManager, testUE4SSVersion } from './tests';
+import { testBluePrintModManager, testMemberVariableLayout, testUE4SSVersion } from './tests';
 
 import { migrate } from './migrations';
 
@@ -215,9 +215,11 @@ async function setup(api: types.IExtensionApi, discovery: types.IDiscoveryResult
   const ensurePath = (filePath: string) => fs.ensureDirWritableAsync(path.join(discovery.path, filePath));
   try {
     const UE4SSPath = resolveUE4SSPath(api);
-    await ensurePath(path.join(UE4SSPath, 'Mods'));
-    await ensurePath(PAK_MODSFOLDER_PATH);
-    await ensurePath(BPPAK_MODSFOLDER_PATH);
+    const oldSegments = UE4SSPath.split(path.sep);
+    oldSegments.pop();
+    oldSegments.push('Mods');
+    const oldScriptSystemPath = oldSegments.join(path.sep);
+    await Promise.all([path.join(UE4SSPath, 'Mods'), oldScriptSystemPath, PAK_MODSFOLDER_PATH, BPPAK_MODSFOLDER_PATH].map(ensurePath));
     await migrate(api);
     await download(api, PLUGIN_REQUIREMENTS);
   } catch (err) {
@@ -270,6 +272,7 @@ async function onGameModeActivated(api: types.IExtensionApi) {
   try {
     await testUE4SSVersion(api);
     await testBluePrintModManager(api, 'gamemode-activated');
+    await testMemberVariableLayout(api, 'gamemode-activated');
   } catch (err) {
     // All errors should've been handled in the test - if this
     //  notification is reported - please fix the test.
@@ -288,6 +291,7 @@ async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, dep
 
   try {
     await testBluePrintModManager(api, 'did-deploy');
+    await testMemberVariableLayout(api, 'did-deploy');
     await onDidDeployLuaEvent(api, profile);
   } catch (err) {
     log('warn', 'failed to test BluePrint Mod Manager', err);

@@ -34,6 +34,7 @@ export const IGNORE_DEPLOY = [MODS_FILE, MODS_FILE_BACKUP, UE4SS_ENABLED_FILE];
 
 export const UE4SS_DWMAPI = 'dwmapi.dll';
 export const XBOX_UE4SS_XINPUT_REPLACEMENT = 'xinput1_4.dll';
+export const UE4SS_MEMBER_VARIABLE_LAYOUT_FILE = 'MemberVariableLayout.ini';
 export const UE4SS_SETTINGS_FILE = 'UE4SS-settings.ini';
 export const UE4SS_2_5_2_FILES = ['xinput1_3.dll', UE4SS_SETTINGS_FILE];
 export const UE4SS_3_0_0_FILES = [UE4SS_DWMAPI, UE4SS_SETTINGS_FILE];
@@ -56,7 +57,6 @@ export type PakModType = 'palworld-pak-modtype' | 'palworld-blueprint-modtype';
 
 export const UE4SS_XINPUT_FILENAME = 'UE4SS_v3.0.0.zip';
 export const UE_PAK_TOOL_FILENAME = 'UnrealPakTool.zip';
-
 export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
   {
     archiveFileName: UE4SS_XINPUT_FILENAME,
@@ -66,7 +66,7 @@ export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
     githubUrl: 'https://api.github.com/repos/UE4SS-RE/RE-UE4SS',
     findMod: (api: types.IExtensionApi) => findModByFile(api, '', UE4SS_SETTINGS_FILE),
     findDownloadId: (api: types.IExtensionApi) => findDownloadIdByPattern(api, PLUGIN_REQUIREMENTS[0]),
-    fileArchivePattern: new RegExp(/^UE4SS.*v(\d+\.\d+\.\d+)/, 'i'),
+    fileArchivePattern: new RegExp(/^UE4SS.*v(\d+\.\d+\.\d+(-\w+(\.\d+)?)?)/, 'i'),
     resolveVersion: (api: types.IExtensionApi) => resolveVersionByPattern(api, PLUGIN_REQUIREMENTS[0]),
   },
   {

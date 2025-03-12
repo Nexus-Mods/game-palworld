@@ -25,6 +25,7 @@ export interface IGitHubRelease {
   tag_name: string;
   name: string;
   assets: IGitHubAsset[];
+  prerelease: boolean;
 }
 
 export interface IGitHubAsset {

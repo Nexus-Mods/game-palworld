@@ -3,13 +3,14 @@ import { fs, selectors, types } from 'vortex-api';
 import path from 'path';
 
 import { MODS_FILE_BACKUP, GAME_ID, UE4SS_2_5_2_FILES, UE4SS_SETTINGS_FILE,
-  UE4SS_PATH_PREFIX, XBOX_UE4SS_XINPUT_REPLACEMENT, UE4SS_DWMAPI, MODS_FILE, LUA_EXTENSIONS } from './common';
+  UE4SS_PATH_PREFIX, XBOX_UE4SS_XINPUT_REPLACEMENT, MODS_FILE, LUA_EXTENSIONS, 
+  PLUGIN_REQUIREMENTS} from './common';
 
 import { getTopLevelPatterns } from './stopPatterns';
 
 //#region UE4SS Installer and test.
 export async function testUE4SSInjector(files: string[], gameId: string): Promise<types.ISupportedResult> {
-  const supported = gameId === GAME_ID && files.some(file => file.toLowerCase() === UE4SS_SETTINGS_FILE.toLowerCase());
+  const supported = gameId === GAME_ID && files.some(file => path.basename(file).toLowerCase() === UE4SS_SETTINGS_FILE.toLowerCase());
   return { supported, requiredFiles: [] };
 }
 
@@ -19,6 +20,13 @@ export async function installUE4SSInjector(api: types.IExtensionApi, files: stri
   const gameStore = discovery.store ?? 'steam';
   // Different gamestores means different target path.
   const architecture = gameStore === 'xbox' ? 'WinGDK' : 'Win64';
+  const expectedInstallDir = path.basename(destinationPath, '.installing');
+  const version = PLUGIN_REQUIREMENTS[0].fileArchivePattern.exec(expectedInstallDir);
+  const versionAttrib: types.IInstruction = {
+    type: 'attribute',
+    key: 'version',
+    value: version[1],
+  }
   const targetPath = path.join(UE4SS_PATH_PREFIX, architecture);
   const instructions = await files.reduce(async (accumP, iter) => {
     const accum = await accumP;
@@ -42,7 +50,7 @@ export async function installUE4SSInjector(api: types.IExtensionApi, files: stri
         return accum;
       }
 
-      if (iter === UE4SS_SETTINGS_FILE) {
+      if (path.basename(iter).toLowerCase() === UE4SS_SETTINGS_FILE.toLowerCase()) {
         // Disable the use of Unreal's object array cache regardless of game store - it's causing crashes.
         const data: string = await fs.readFileAsync(path.join(destinationPath, iter), { encoding: 'utf8' });
         const newData = data.replace(/bUseUObjectArrayCache = true/gm, 'bUseUObjectArrayCache = false');
@@ -63,7 +71,7 @@ export async function installUE4SSInjector(api: types.IExtensionApi, files: stri
       accum.push(instruction);
     }
     return accum;
-  }, Promise.resolve([]))
+  }, Promise.resolve([versionAttrib]))
   instructions.push({
     type: 'setmodtype',
     value: '',

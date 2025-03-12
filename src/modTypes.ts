@@ -103,7 +103,10 @@ export function getLUAPath(api: types.IExtensionApi, game: types.IGame) {
     return '.';
   }
   const ue4ssPath = resolveUE4SSPath(api);
-  const luaPath = path.join(discovery.path, ue4ssPath, 'Mods');
+  const segments = ue4ssPath.split(path.sep);
+  segments.pop();
+  segments.push('Mods');
+  const luaPath = path.join(discovery.path, segments.join(path.sep));
   return luaPath;
 }
 

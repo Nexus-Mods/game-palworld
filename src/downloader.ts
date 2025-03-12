@@ -8,7 +8,6 @@ import axios from 'axios';
 
 import { GAME_ID, NOTIF_ID_REQUIREMENTS } from './common';
 import { IPluginRequirement, IGitHubAsset, IGitHubRelease } from './types';
-import { onRemoveMod } from './modsFile';
 
 
 export async function download(api: types.IExtensionApi, requirements: IPluginRequirement[], force?: boolean) {
@@ -24,15 +23,16 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
   const profileId = selectors.lastActiveProfileForGame(api.getState(), GAME_ID);
   try {
     for (const req of requirements) {
-      let asset;
       let versionMismatch = false;
+      const asset = await getLatestGithubReleaseAsset(api, req);
+      const versionMatch = !!req.fileArchivePattern ? req.fileArchivePattern.exec(asset.name) : [asset.name, asset.release.tag_name];
+      const latestVersion = versionMatch[1];
+      const coercedVersion = util.semverCoerce(latestVersion, { includePrerelease: true});
       const mod = await req.findMod(api);
       if (!!mod && req.resolveVersion && force !== true) {
         // Ensure it's the right version.
         const version = await req.resolveVersion(api);
-        asset = await getLatestGithubReleaseAsset(api, req);
-        const coerced = semver.coerce(asset.release.tag_name);
-        if (semver.gt(coerced.version, version)) {
+        if (!semver.satisfies(`^${coercedVersion.version}`, version, { includePrerelease: true }) && coercedVersion.version !== version) {
           versionMismatch = true;
           batchActions.push(actions.setModEnabled(profileId, mod.id, false));
         } else {
@@ -41,8 +41,11 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
       }
       else if (!versionMismatch && force !== true && mod?.id !== undefined) {
         batchActions.push(actions.setModEnabled(profileId, mod.id, true));
-        batchActions.push(actions.setModAttribute(GAME_ID, mod.id, 'customFileName', req.userFacingName));
-        batchActions.push(actions.setModAttribute(GAME_ID, mod.id, 'description', 'This is a Palworld modding requirement - leave it enabled.'));
+        batchActions.push(actions.setModAttributes(GAME_ID, mod.id, {
+          customFileName: req.userFacingName,
+          version: coercedVersion.version,
+          description: 'This is a Palworld modding requirement - leave it enabled.',
+        }));
         continue;
       }
       if (req?.modId !== undefined) {
@@ -52,9 +55,6 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
         if (!versionMismatch && !force && dlId) {
           await installDownload(api, dlId, req.userFacingName);
           continue;
-        }
-        if (!asset) {
-          asset = await getLatestGithubReleaseAsset(api, req);
         }
         const tempPath = path.join(util.getVortexPath('temp'), asset.name);
         try {
@@ -179,7 +179,7 @@ async function downloadNexus(api: types.IExtensionApi, requirement: IPluginRequi
   }
 }
 
-export async function getLatestGithubReleaseAsset(api: types.IExtensionApi, requirement: IPluginRequirement): Promise<IGitHubAsset | null> {
+export async function getLatestGithubReleaseAsset(api: types.IExtensionApi, requirement: IPluginRequirement, preRelease: boolean = true): Promise<IGitHubAsset | null> {
   const chooseAsset = (release: IGitHubRelease) => {
     const assets = release.assets;
     if (!!requirement.fileArchivePattern) {
@@ -200,7 +200,7 @@ export async function getLatestGithubReleaseAsset(api: types.IExtensionApi, requ
     }
   }
   try {
-    const response = await axios.get(`${requirement.githubUrl}/releases/latest`);
+    const response = await axios.get(`${requirement.githubUrl}/releases`);
     const resHeaders = response.headers;
     const callsRemaining = parseInt(util.getSafe(resHeaders, ['x-ratelimit-remaining'], '0'), 10);
     if ([403, 404].includes(response?.status) && (callsRemaining === 0)) {
@@ -209,9 +209,9 @@ export async function getLatestGithubReleaseAsset(api: types.IExtensionApi, requ
         return Promise.reject(new util.ProcessCanceled('GitHub rate limit exceeded'));
     }
     if (response.status === 200) {
-      const release: IGitHubRelease = response.data;
-      if (release.assets.length > 0) {
-        return chooseAsset(release);
+      const releases: IGitHubRelease[] = response.data.filter((release: IGitHubRelease) => preRelease || !release.prerelease);
+      if (releases[0].assets.length > 0) {
+        return chooseAsset(releases[0]);
       }
     }
   } catch (error) {

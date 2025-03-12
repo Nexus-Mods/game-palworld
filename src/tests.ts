@@ -1,20 +1,96 @@
 /* eslint-disable */
 import path from 'path';
 import semver from 'semver';
-import { fs, log, types, selectors, actions } from 'vortex-api';
+import { fs, types, selectors, util } from 'vortex-api';
 
-import { GAME_ID, MODS_FILE_BACKUP, NAMESPACE, NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS, UE4SS_ENABLED_FILE, UE4SS_SETTINGS_FILE } from './common';
+import { GAME_ID, MODS_FILE_BACKUP, NAMESPACE, NOTIF_ID_BP_MODLOADER_DISABLED,
+  PLUGIN_REQUIREMENTS, UE4SS_ENABLED_FILE, UE4SS_SETTINGS_FILE,
+  UE4SS_MEMBER_VARIABLE_LAYOUT_FILE } from './common';
 import { EventType } from './types';
 import { findModByFile, resolveUE4SSPath } from './util';
 import { download, getLatestGithubReleaseAsset } from './downloader';
+
+export async function testMemberVariableLayout(api: types.IExtensionApi, eventType: EventType) {
+  const t = api.translate;
+  const state = api.getState();
+  if (selectors.activeGameId(state) !== GAME_ID) {
+    return;
+  }
+
+  let ue4ssMod = await findModByFile(api, '', UE4SS_SETTINGS_FILE);
+  if (ue4ssMod === undefined) {
+    return;
+  }
+  const stagingFolder = selectors.installPathForGame(state, GAME_ID);
+  const modPath = path.join(stagingFolder, ue4ssMod.installationPath);
+  const ue4ssRelPath = resolveUE4SSPath(api);
+  const ue4ssVariableLayout = path.join(modPath, ue4ssRelPath, UE4SS_MEMBER_VARIABLE_LAYOUT_FILE);
+  const variableLayoutExists = await fs.statAsync(ue4ssVariableLayout).then(() => true).catch(() => false);
+  if (variableLayoutExists) {
+    return;
+  }
+
+  const autoFix = async () => {
+    try {
+      await util.toPromise(cb => api.events.emit('purge-mods', true, cb));
+      const source = path.join(__dirname, UE4SS_MEMBER_VARIABLE_LAYOUT_FILE);
+      await fs.copyAsync(source, ue4ssVariableLayout);
+      await util.toPromise(cb => api.events.emit('deploy-mods', cb));
+    } catch (err) {
+      api.showErrorNotification('Failed to apply Member Variable Layout', err);
+      return;
+    }
+    return Promise.resolve();
+  };
+
+  api.sendNotification({
+    id: 'palworld-ue4ss-member-variable-layout',
+    type: 'warning',
+    message: 'UE4SS MemberVariableLayout.ini missing',
+    allowSuppress: false,
+    actions: [
+      {
+        title: 'More',
+        action: (dismiss) => {
+          api.showDialog('question', 'Apply Member Variable Layout', {
+            bbcode: t('The MemberVariableLayout.ini file is missing from your UE4SS installation. This file is required for some mods to function correctly.[br][/br][br][/br]'
+                    + 'Would you like to apply the default layout?'),
+          }, [
+            {
+              label: 'Apply',
+              action: async () => {
+                await autoFix();
+                dismiss();
+              },
+              default: true,
+            },
+            { label: 'Close' },
+          ]);
+        }
+      },
+      {
+        title: 'Fix',
+        action: async (dismiss) => {
+          await autoFix();
+          dismiss();
+        }
+      }
+    ],
+  });
+}
 
 export async function testUE4SSVersion(api: types.IExtensionApi, eventType?: EventType) {
   const t = api.translate;
   const requirement = PLUGIN_REQUIREMENTS[0];
   const currentVersion = await requirement.resolveVersion(api);
   const latest = await getLatestGithubReleaseAsset(api, requirement);
-  const coercedVersion = semver.coerce(latest.release.tag_name);
-  if (!semver.gt(coercedVersion.version, currentVersion)) {
+  const versionMatch = latest.name.match(/v?(\d+\.\d+\.\d+(-\w+(\.\d+)?)?)/);
+  if (!versionMatch) {
+    throw new Error('Unable to determine version from release asset');
+  }
+  const latestVersion = versionMatch[1];
+  const coercedVersion = util.semverCoerce(latestVersion, { includePrerelease: true});
+  if (coercedVersion.version === currentVersion || semver.satisfies(`^${coercedVersion.version}`, currentVersion, { includePrerelease: true })) {
     return;
   }
 

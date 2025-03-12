@@ -6,7 +6,7 @@ import turbowalk, { IWalkOptions, IEntry } from 'turbowalk';
 
 import { UE4SS_PATH_PREFIX, GAME_ID,
   NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS,
-  MOD_TYPE_UNREAL_PAK_TOOL, NOTIF_ID_UE4SS_UPDATE, MODS_FILE
+  MOD_TYPE_UNREAL_PAK_TOOL, NOTIF_ID_UE4SS_UPDATE,
 } from './common';
 
 import { IPluginRequirement } from './types';
@@ -15,7 +15,7 @@ export function resolveUE4SSPath(api: types.IExtensionApi): string {
   const state = api.getState();
   const discovery = selectors.discoveryByGame(state, GAME_ID);
   const architecture = discovery?.store === 'xbox' ? 'WinGDK' : 'Win64';
-  return path.join(UE4SS_PATH_PREFIX, architecture);
+  return path.join(UE4SS_PATH_PREFIX, architecture, 'ue4ss');
 }
 
 export async function resolveUnrealPakToolPath(api: types.IExtensionApi): Promise<string | null> {
@@ -36,7 +36,7 @@ export async function resolveVersionByPattern(api: types.IExtensionApi, requirem
   const files: types.IDownload[] = util.getSafe(state, ['persistent', 'downloads', 'files'], []);
   const latestVersion = Object.values(files).reduce((prev, file) => {
     const match = requirement.fileArchivePattern.exec(file.localPath);
-    if (match?.[1] && semver.gt(match[1], prev)) {
+    if (match?.[1] && !semver.satisfies(`^${match[1]}`, prev)) {
       prev = match[1];
     }
     return prev;
@@ -59,7 +59,7 @@ export async function findModByFile(api: types.IExtensionApi, modType: string, f
   for (const mod of mods) {
     const modPath = path.join(installationPath, mod.installationPath);
     const files = await walkPath(modPath);
-    if (files.find(file => file.filePath.endsWith(fileName))) {
+    if (files.some(file => path.basename(file.filePath).toLowerCase() === path.basename(fileName).toLowerCase())) {
       return mod;
     }
   }
