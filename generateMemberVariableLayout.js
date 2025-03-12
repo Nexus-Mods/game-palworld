@@ -20,6 +20,7 @@ if (fs.existsSync(outputPath)) {
       file.on('finish', () => {
         file.close();
         console.log('Download completed.');
+        generateMemberVariableLayout();
       });
     } else {
       console.log(`Failed to download file: ${response.statusCode}`);
@@ -29,45 +30,47 @@ if (fs.existsSync(outputPath)) {
   });
 }
 
-fs.readFile(outputPath, 'utf-8', (err, data) => {
-  if (err) {
-    console.error(`Error reading file: ${err.message}`);
-    return;
-  }
-
-  const config = ini.parse(data);
-  const uEnumSection = {
-    CppForm: '0x58',
-    CppType: '0x30',
-    EnumDisplayNameFn: '0x60',
-    EnumFlags_Internal: '0x5C',
-    EnumPackage: '0x68',
-    Names: '0x48'
-  };
-
-  let needsUpdate = false;
-  if (!config.UEnum) {
-    config.UEnum = uEnumSection;
-    needsUpdate = true;
-  } else {
-    for (const key in uEnumSection) {
-      if (config.UEnum[key] !== uEnumSection[key]) {
-        config.UEnum[key] = uEnumSection[key];
-        needsUpdate = true;
+const generateMemberVariableLayout = () => {
+  fs.readFile(outputPath, 'utf-8', (err, data) => {
+    if (err) {
+      console.error(`Error reading file: ${err.message}`);
+      return;
+    }
+  
+    const config = ini.parse(data);
+    const uEnumSection = {
+      CppForm: '0x58',
+      CppType: '0x30',
+      EnumDisplayNameFn: '0x60',
+      EnumFlags_Internal: '0x5C',
+      EnumPackage: '0x68',
+      Names: '0x48'
+    };
+  
+    let needsUpdate = false;
+    if (!config.UEnum) {
+      config.UEnum = uEnumSection;
+      needsUpdate = true;
+    } else {
+      for (const key in uEnumSection) {
+        if (config.UEnum[key] !== uEnumSection[key]) {
+          config.UEnum[key] = uEnumSection[key];
+          needsUpdate = true;
+        }
       }
     }
-  }
-
-  if (needsUpdate) {
-    const newOutputPath = path.join(__dirname, 'src', 'assets', 'MemberVariableLayout.ini');
-    fs.writeFile(newOutputPath, ini.stringify(config), (err) => {
-      if (err) {
-        console.error(`Error writing file: ${err.message}`);
-      } else {
-        console.log('File updated and saved as MemberVariableLayout.ini');
-      }
-    });
-  } else {
-    console.log('No updates needed.');
-  }
-});
+  
+    if (needsUpdate) {
+      const newOutputPath = path.join(__dirname, 'src', 'assets', 'MemberVariableLayout.ini');
+      fs.writeFile(newOutputPath, ini.stringify(config), (err) => {
+        if (err) {
+          console.error(`Error writing file: ${err.message}`);
+        } else {
+          console.log('File updated and saved as MemberVariableLayout.ini');
+        }
+      });
+    } else {
+      console.log('No updates needed.');
+    }
+  });
+};
