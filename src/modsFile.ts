@@ -40,9 +40,9 @@ async function esureModsFileEntryAdded(api: types.IExtensionApi, modId: string) 
   const folderId = mod.attributes?.palworldFolderId ?? mod.installationPath;
   const data = await fs.readFileAsync(ue4ssModsFile, { encoding: 'utf8' });
   const lines: string[] = data.split(/\r\n/).filter(line => !!line);
-  const lineIndex = lines.findIndex(line => line.includes(`${folderId} = 1`));
+  const lineIndex = lines.findIndex(line => line.includes(`${folderId} : 1`));
   if (lineIndex === - 1) {
-    lines.splice(-2, 0, `${folderId} = 1`);
+    lines.splice(-2, 0, `${folderId} : 1`);
     await fs.writeFileAsync(ue4ssModsFile, lines.join('\r\n'), { encoding: 'utf8' });
   }
   return;
@@ -72,7 +72,7 @@ async function esureModsFileEntryRemoved(api: types.IExtensionApi, modId: string
   const folderId = mod.attributes?.palworldFolderId ?? mod.installationPath;
   const data = await fs.readFileAsync(ue4ssModsFile, { encoding: 'utf8' });
   const lines: string[] = data.split(/\r\n/);
-  const lineIndex = lines.findIndex(line => line.includes(`${folderId} = 1`));
+  const lineIndex = lines.findIndex(line => line.includes(`${folderId} : 1`));
   if (lineIndex !== - 1) {
     lines.splice(lineIndex, 1);
     await fs.writeFileAsync(ue4ssModsFile, lines.join('\r\n'), { encoding: 'utf8' });
