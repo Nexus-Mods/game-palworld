@@ -25,28 +25,40 @@ export async function download(api: types.IExtensionApi, requirements: IPluginRe
     for (const req of requirements) {
       let versionMismatch = false;
       const asset = await getLatestGithubReleaseAsset(api, req);
-      const versionMatch = !!req.fileArchivePattern ? req.fileArchivePattern.exec(asset.name) : [asset.name, asset.release.tag_name];
-      const latestVersion = versionMatch[1];
-      const coercedVersion = util.semverCoerce(latestVersion, { includePrerelease: true});
+
       const mod = await req.findMod(api);
-      if (!!mod && req.resolveVersion && force !== true) {
-        // Ensure it's the right version.
-        const version = await req.resolveVersion(api);
-        if (!semver.satisfies(`^${coercedVersion.version}`, version, { includePrerelease: true }) && coercedVersion.version !== version) {
-          versionMismatch = true;
-          batchActions.push(actions.setModEnabled(profileId, mod.id, false));
+
+      // If mod is already installed and we're not forcing, skip download
+      if (!!mod && force !== true) {
+        const versionMatch = !!req.fileArchivePattern ? req.fileArchivePattern.exec(asset.name) : [asset.name, asset.release.tag_name];
+        const latestVersion = versionMatch?.[1];
+
+        // Only do version checking if we have both a version in the filename and a resolveVersion function
+        if (latestVersion && req.resolveVersion) {
+          const coercedVersion = util.semverCoerce(latestVersion);
+          const version = await req.resolveVersion(api);
+          if (!semver.satisfies(`^${coercedVersion.version}`, version, { includePrerelease: true }) && coercedVersion.version !== version) {
+            versionMismatch = true;
+            batchActions.push(actions.setModEnabled(profileId, mod.id, false));
+          } else {
+            // Version matches, enable and continue
+            batchActions.push(actions.setModEnabled(profileId, mod.id, true));
+            batchActions.push(actions.setModAttributes(GAME_ID, mod.id, {
+              customFileName: req.userFacingName,
+              version: coercedVersion.version,
+              description: 'This is a Palworld modding requirement - leave it enabled.',
+            }));
+            continue;
+          }
         } else {
+          // No version info in filename, just check if mod exists and skip download
+          batchActions.push(actions.setModEnabled(profileId, mod.id, true));
+          batchActions.push(actions.setModAttributes(GAME_ID, mod.id, {
+            customFileName: req.userFacingName,
+            description: 'This is a Palworld modding requirement - leave it enabled.',
+          }));
           continue;
         }
-      }
-      else if (!versionMismatch && force !== true && mod?.id !== undefined) {
-        batchActions.push(actions.setModEnabled(profileId, mod.id, true));
-        batchActions.push(actions.setModAttributes(GAME_ID, mod.id, {
-          customFileName: req.userFacingName,
-          version: coercedVersion.version,
-          description: 'This is a Palworld modding requirement - leave it enabled.',
-        }));
-        continue;
       }
       if (req?.modId !== undefined) {
         await downloadNexus(api, req);

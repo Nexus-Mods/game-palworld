@@ -18,13 +18,11 @@ import {
   getLUAPath, testLUAPath, getLUAPathV2, testLUAPathV2,
 } from './modTypes';
 import { installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector } from './installers';
-import { testBluePrintModManager, testMemberVariableLayout, testUE4SSVersion } from './tests';
 
 import { migrate } from './migrations';
 
 import { dismissNotifications, resolveUE4SSPath } from './util';
 import { download } from './downloader';
-import { GamesMap, ModsMap } from './types';
 
 import { onAddMod, onRemoveMod } from './modsFile';
 
@@ -174,34 +172,13 @@ function main(context: types.IExtensionContext) {
   );
 
   context.once(() => {
-    // context.api.events.on('did-install-mod', async (gameId: string, archiveId: string, modId: string) => onModsInstalled(context.api, gameId, [modId]));
     context.api.events.on('mods-enabled', async (modIds: string[], enabled: boolean, gameId: string) => onModsEnabled(context.api, modIds, enabled, gameId));
     context.api.onAsync('will-remove-mods', async (gameId: string, modIds: string[]) => onModsRemoved(context.api, gameId, modIds));
-    // context.api.events.on('did-install-mod', async (gameId, archiveId, modId) => {
-    //   if (gameId !== GAME_ID) {
-    //     return;
-    //   }
-
-    //   const state = context.api.getState();
-    //   const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', gameId], {});
-    //   const mod = mods?.[modId];
-    //   if (mod.type !== MOD_TYPE_LUA) {
-    //     return;
-    //   }
-
-    //   const installPath = selectors.installPathForGame(state, GAME_ID);
-    //   const modPath = path.join(installPath, mod.installationPath);
-    //   const exists = await fs.statAsync(path.join(modPath, 'enabled.txt')).then(() => true).catch(() => false);
-    //   if (!exists) {
-    //     await fs.writeFileAsync(path.join(modPath, 'enabled.txt'), '', { encoding: 'utf8' });
-    //   }
-    // })
     context.api.events.on('gamemode-activated', () => onGameModeActivated(context.api));
     context.api.onAsync('will-deploy', (profileId: string, deployment: types.IDeploymentManifest) => onWillDeployEvent(context.api, profileId, deployment));
     context.api.onAsync('did-deploy', (profileId: string, deployment: types.IDeploymentManifest) => onDidDeployEvent(context.api, profileId, deployment));
     context.api.onAsync('will-purge', (profileId: string) => onWillPurgeEvent(context.api, profileId));
     context.api.onAsync('did-purge', (profileId: string) => onDidPurgeEvent(context.api, profileId));
-    context.api.onAsync('check-mods-version', (gameId: string, mods: types.IMod[], forced?: boolean) => onCheckModVersion(context.api, gameId, mods, forced));
   });
 
   return true;
@@ -268,17 +245,6 @@ async function onGameModeActivated(api: types.IExtensionApi) {
     dismissNotifications(api);
     return;
   }
-
-  try {
-    await testUE4SSVersion(api);
-    await testBluePrintModManager(api, 'gamemode-activated');
-    await testMemberVariableLayout(api, 'gamemode-activated');
-  } catch (err) {
-    // All errors should've been handled in the test - if this
-    //  notification is reported - please fix the test.
-    api.showErrorNotification('BPModManager is disabled', err);
-    return;
-  }
 }
 
 async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, deployment: types.IDeploymentManifest): Promise<void> {
@@ -290,8 +256,6 @@ async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, dep
   }
 
   try {
-    await testBluePrintModManager(api, 'did-deploy');
-    await testMemberVariableLayout(api, 'did-deploy');
     await onDidDeployLuaEvent(api, profile);
   } catch (err) {
     log('warn', 'failed to test BluePrint Mod Manager', err);
@@ -360,18 +324,6 @@ async function onWillDeployEvent(api: types.IExtensionApi, profileId: any, deplo
   if (!discovery?.path || discovery?.store !== 'xbox') {
     // Game not discovered or not Xbox? bail.
     return Promise.resolve();
-  }
-}
-
-async function onCheckModVersion(api: types.IExtensionApi, gameId: string, mods: types.IMod[], forced?: boolean) {
-  const profile = selectors.activeProfile(api.getState());
-  if (profile.gameId !== GAME_ID || gameId !== GAME_ID) {
-    return;
-  }
-  try {
-    await testUE4SSVersion(api);
-  } catch (err) {
-    log('warn', 'failed to test UE4SS version', err);
   }
 }
 

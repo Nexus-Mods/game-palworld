@@ -2,7 +2,7 @@
 import path from 'path';
 import { types } from 'vortex-api';
 import { IPluginRequirement } from './types';
-import { findDownloadIdByFile, findModByFile, resolveVersionByPattern, findDownloadIdByPattern } from './util';
+import { findDownloadIdByFile, findModByFile, findDownloadIdByPattern } from './util';
 
 export const NAMESPACE = 'game-palworld';
 
@@ -63,11 +63,10 @@ export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
     modType: '',
     assemblyFileName: UE4SS_DWMAPI,
     userFacingName: 'UE4 Scripting System',
-    githubUrl: 'https://api.github.com/repos/UE4SS-RE/RE-UE4SS',
+    githubUrl: 'https://api.github.com/repos/Okaetsu/RE-UE4SS',
     findMod: (api: types.IExtensionApi) => findModByFile(api, '', UE4SS_SETTINGS_FILE),
     findDownloadId: (api: types.IExtensionApi) => findDownloadIdByPattern(api, PLUGIN_REQUIREMENTS[0]),
-    fileArchivePattern: new RegExp(/^UE4SS.*v(\d+\.\d+\.\d+(-\w+(\.\d+)?)?)/, 'i'),
-    resolveVersion: (api: types.IExtensionApi) => resolveVersionByPattern(api, PLUGIN_REQUIREMENTS[0]),
+    fileArchivePattern: new RegExp(/^UE4SS-Palworld/, 'i'),
   },
   {
     archiveFileName: UE_PAK_TOOL_FILENAME,
