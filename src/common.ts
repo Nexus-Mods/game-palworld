@@ -39,6 +39,21 @@ export const UE4SS_SETTINGS_FILE = 'UE4SS-settings.ini';
 export const UE4SS_2_5_2_FILES = ['xinput1_3.dll', UE4SS_SETTINGS_FILE];
 export const UE4SS_3_0_0_FILES = [UE4SS_DWMAPI, UE4SS_SETTINGS_FILE];
 
+// Core UE4SS assembly and the folder the payload is nested under.
+export const UE4SS_DLL = 'UE4SS.dll';
+export const UE4SS_FOLDER = 'ue4ss';
+
+// Any of these present in an archive marks it as a UE4SS installation.
+export const UE4SS_IDENTIFIERS = [UE4SS_SETTINGS_FILE, UE4SS_DLL, UE4SS_DWMAPI].map(f => f.toLowerCase());
+
+// Proxy loaders that sit next to the game executable rather than under "ue4ss".
+export const UE4SS_LOADER_FILES = [UE4SS_DWMAPI.toLowerCase(), 'xinput1_3.dll'];
+
+// Captures the version from a UE4SS folder name, e.g.
+//    "UE4SS_v3.0.1"                -> 3.0.1
+//    "UE4SS_v3.0.1-1011-gb50986bd" -> 3.0.1-1011-gb50986bd
+export const UE4SS_VERSION_PATTERN = /v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?)/i;
+
 export const UE_PAK_TOOL_FILES = [
   'UnrealPak.exe',
 ];
