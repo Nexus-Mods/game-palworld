@@ -1,6 +1,6 @@
 /* eslint-disable */
 
-import { LUA_EXTENSIONS, PAK_EXTENSIONS, TOP_LEVEL_DIRECTORIES } from './common';
+import { LUA_EXTENSIONS, CPPMOD_EXTENSIONS, PAK_EXTENSIONS, TOP_LEVEL_DIRECTORIES } from './common';
 
 function dirToWordExp(input: string, index?: number, array?: string[], escape?: boolean): string {
   return escape ? `(^|\/)${input}(\/|$)` : `(^|/)${input}(/|$)`;
@@ -19,7 +19,9 @@ export function getStopPatterns(escape: boolean = false): string[] {
   const pakFilePatterns: string[] = PAK_EXTENSIONS.map((val, idx, arr) => extToWordExp(val.toLowerCase(), idx, arr, escape));
   const luaFilePatterns: string[] = LUA_EXTENSIONS.map((val, idx, arr) => extToWordExp(val.toLowerCase(), idx, arr, escape));
   const luaFolderPatterns: string[] = ['scripts'].map((val, idx, arr) => dirToWordExp(val.toLowerCase(), idx, arr, escape));
-  return [].concat(getTopLevelPatterns(), pakFilePatterns, luaFolderPatterns, luaFilePatterns);
+  const cppModFilePatterns: string[] = CPPMOD_EXTENSIONS.map((val, idx, arr) => extToWordExp(val.toLowerCase(), idx, arr, escape));
+  const cppModFolderPatterns: string[] = ['dlls'].map((val, idx, arr) => dirToWordExp(val.toLowerCase(), idx, arr, escape));
+  return [].concat(getTopLevelPatterns(), pakFilePatterns, luaFolderPatterns, luaFilePatterns, cppModFolderPatterns, cppModFilePatterns);
 }
 
 export function getTopLevelPatterns(escape: boolean = false): string[] {

@@ -4,7 +4,7 @@ import { actions, fs, selectors, types, util } from 'vortex-api';
 
 import { setPalworldMigrationVersion } from './actions';
 
-import { GAME_ID, PLUGIN_REQUIREMENTS, MODS_FILE, MODS_FILE_BACKUP, MOD_TYPE_LUA_V2, UE4SS_PATH_PREFIX, MOD_TYPE_LUA } from './common';
+import { GAME_ID, PLUGIN_REQUIREMENTS, MODS_FILE, MODS_FILE_BACKUP, MOD_TYPE_LUA_V2, UE4SS_PATH_PREFIX, MOD_TYPE_LUA, MOD_TYPE_CPP } from './common';
 import { resolveUE4SSPath, runStagingOperationOnMod } from './util';
 
 const MIGRATIONS = {
@@ -51,6 +51,8 @@ export async function migrate019(api: types.IExtensionApi): Promise<void> {
     // Nothing to do here.
     return;
   }
+
+  // Lua mods
   await api.emitAndAwait('purge-mods-in-path', GAME_ID, MOD_TYPE_LUA_V2, oldPath);
   await api.emitAndAwait('purge-mods-in-path', GAME_ID, MOD_TYPE_LUA, oldPath);
   const luaMods = Object.values(mods)
@@ -59,6 +61,16 @@ export async function migrate019(api: types.IExtensionApi): Promise<void> {
   for (const mod of luaMods) {
     batchedActions.push(actions.setModType(GAME_ID, mod.id, MOD_TYPE_LUA_V2));
   }
+  
+  // Cpp mods
+  await api.emitAndAwait('purge-mods-in-path', GAME_ID, MOD_TYPE_CPP, oldPath);
+  const cppMods = Object.values(mods)
+    .filter(mod => [MOD_TYPE_CPP].includes(mod.type));
+
+  for (const mod of cppMods) {
+    batchedActions.push(actions.setModType(GAME_ID, mod.id, MOD_TYPE_CPP));
+  }
+  
   util.batchDispatch(api.store, batchedActions);
   await util.toPromise(cb => api.events.emit('deploy-mods', cb));
   return;
