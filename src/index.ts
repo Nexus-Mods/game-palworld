@@ -7,7 +7,7 @@ import { fs, log, types, selectors, util } from 'vortex-api';
 import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
   PAK_MODSFOLDER_PATH, STEAMAPP_ID, XBOX_EXECUTABLE, XBOX_ID,
   PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA, MOD_TYPE_BP_PAK,
-  BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, IGNORE_DEPLOY, MOD_TYPE_LUA_V2,
+  BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, IGNORE_DEPLOY, MOD_TYPE_LUA_V2, MOD_TYPE_CPP
 } from './common';
 
 import { settingsReducer } from './reducers';
@@ -16,8 +16,9 @@ import { getStopPatterns } from './stopPatterns';
 import {
   getBPPakPath, getPakPath, testBPPakPath, testPakPath, testUnrealPakTool,
   getLUAPath, testLUAPath, getLUAPathV2, testLUAPathV2,
+  getCppModPath, testCppModPath
 } from './modTypes';
-import { installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector } from './installers';
+import { installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector, testCppMod, installCppMod } from './installers';
 
 import { migrate } from './migrations';
 
@@ -98,7 +99,7 @@ function main(context: types.IExtensionContext) {
   });
 
   context.registerAction('mod-icons', 300, 'open-ext', {},
-                         'Open LUA Mods Folder', () => {
+                         'Open LUA/CPP Mods Folder', () => {
     const state = context.api.getState();
     const discovery = selectors.discoveryByGame(state, GAME_ID);
     const ue4ssPath = resolveUE4SSPath(context.api);
@@ -121,6 +122,9 @@ function main(context: types.IExtensionContext) {
 
   context.registerInstaller('palworld-lua-installer', 30, testLuaMod as any,
     (files, destinationPath, gameId) => installLuaMod(context.api, files, destinationPath, gameId) as any);
+
+  context.registerInstaller('palworld-cppmod-installer', 35, testCppMod as any,
+    (files, destinationPath, gameId) => installCppMod(context.api, files, destinationPath, gameId) as any);
 
   context.registerModType(
     MOD_TYPE_UNREAL_PAK_TOOL,
@@ -169,6 +173,15 @@ function main(context: types.IExtensionContext) {
     (game: types.IGame) => getLUAPath(context.api, game),
     testLUAPath as any,
     { deploymentEssential: true, name: 'LUA Mod', mergeMods: (mod: types.IMod) => mod.id }
+  );
+
+  context.registerModType(
+    MOD_TYPE_CPP,
+    10,
+    (gameId) => GAME_ID === gameId,
+    (game: types.IGame) => getCppModPath(context.api, game),
+    testCppModPath as any,
+    { deploymentEssential: true, name: 'CPP Mod' }
   );
 
   context.once(() => {
@@ -223,7 +236,7 @@ async function onModsInstalled(api: types.IExtensionApi, gameId: string, modIds:
   const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
   for (const modId of modIds) {
     const mod = mods[modId];
-    if ([MOD_TYPE_LUA, MOD_TYPE_LUA_V2].includes(mod?.type)) {
+    if ([MOD_TYPE_LUA, MOD_TYPE_LUA_V2, MOD_TYPE_CPP].includes(mod?.type)) {
       await onAddMod(api, modId);
     } 
   }
@@ -261,6 +274,12 @@ async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, dep
     log('warn', 'failed to test BluePrint Mod Manager', err);
   }
 
+  try {
+    await onDidDeployCppModEvent(api, profile);
+  } catch (err) {
+    log('warn', 'failed to deploy cpp mod', err);
+  }
+
   return Promise.resolve();
 }
 
@@ -269,6 +288,13 @@ const isLuaMod = (mod: types.IMod) => {
     return false;
   }
   return [MOD_TYPE_LUA, MOD_TYPE_LUA_V2].includes(mod.type);
+}
+
+const isCppMod = (mod: types.IMod) => {
+  if (!mod?.type) {
+    return false;
+  }
+  return [MOD_TYPE_CPP].includes(mod.type);
 }
 
 async function onDidDeployLuaEvent(api: types.IExtensionApi, profile: types.IProfile): Promise<void> {
@@ -290,6 +316,25 @@ async function onDidPurgeLuaEvent(api: types.IExtensionApi, profile: types.IProf
   await onModsRemoved(api, profile.gameId, [].concat(enabled, disabled));
 }
 
+async function onDidDeployCppModEvent(api: types.IExtensionApi, profile: types.IProfile): Promise<void> {
+  const state = api.getState();
+  const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
+  const modState = util.getSafe(profile, ['modState'], {});
+  const enabled = Object.keys(modState).filter((key) => isCppMod(mods?.[key]) && modState[key].enabled);
+  const disabled = Object.keys(modState).filter((key) => isCppMod(mods?.[key]) && !modState[key].enabled);
+  await onModsInstalled(api, profile.gameId, enabled);
+  await onModsRemoved(api, profile.gameId, disabled);
+}
+
+async function onDidPurgeCppModEvent(api: types.IExtensionApi, profile: types.IProfile): Promise<void> {
+  const state = api.getState();
+  const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
+  const modState = util.getSafe(profile, ['modState'], {});
+  const enabled = Object.keys(modState).filter((key) => isCppMod(mods?.[key]) && modState[key].enabled);
+  const disabled = Object.keys(modState).filter((key) => isCppMod(mods?.[key]) && !modState[key].enabled);
+  await onModsRemoved(api, profile.gameId, [].concat(enabled, disabled));
+}
+
 async function onWillPurgeEvent(api: types.IExtensionApi, profileId: string): Promise<void> {
   return;
 }
@@ -306,6 +351,12 @@ async function onDidPurgeEvent(api: types.IExtensionApi, profileId: string): Pro
     await onDidPurgeLuaEvent(api, profile);
   } catch (err) {
     log('warn', 'failed to remove lua entries from mods.txt', err);
+  }
+
+  try {
+    await onDidPurgeCppModEvent(api, profile);
+  } catch (err) {
+    log('warn', 'failed to remove cpp mod entries from mods.txt', err);
   }
 
   return Promise.resolve();

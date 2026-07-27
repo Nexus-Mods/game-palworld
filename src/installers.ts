@@ -4,7 +4,8 @@ import path from 'path';
 
 import { MODS_FILE_BACKUP, GAME_ID, UE4SS_2_5_2_FILES, UE4SS_SETTINGS_FILE,
   UE4SS_PATH_PREFIX, XBOX_UE4SS_XINPUT_REPLACEMENT, MODS_FILE, LUA_EXTENSIONS,
-  UE4SS_FOLDER, UE4SS_IDENTIFIERS, UE4SS_LOADER_FILES, UE4SS_VERSION_PATTERN } from './common';
+  UE4SS_FOLDER, UE4SS_IDENTIFIERS, UE4SS_LOADER_FILES, UE4SS_VERSION_PATTERN, 
+  CPPMOD_EXTENSIONS} from './common';
 
 import { getTopLevelPatterns } from './stopPatterns';
 
@@ -93,20 +94,28 @@ export async function installUE4SSInjector(api: types.IExtensionApi, files: stri
   return { instructions };
 }
 //#endregion
-//#region LUA
-export async function testLuaMod(files: string[], gameId: string): Promise<types.ISupportedResult> {
-  const rightGame = gameId === GAME_ID;
-  const rightFile = files.some(file => LUA_EXTENSIONS.includes(path.extname(file)));
-  const supported = rightGame && rightFile;
-  return { supported, requiredFiles: [] };
-}
 
-export async function installLuaMod(api: types.IExtensionApi, files: string[], destinationPath: string, gameId: string): Promise<types.IInstallResult> {
-  const luaFiles = files.filter(file => LUA_EXTENSIONS.includes(path.extname(file)));
-  // We want the lua with the shortest path first as we're going to use that
+//#region LUA/CppMod install function
+// Helper function to avoid repeating the same code for cpp and lua mods since they both go into Mods folder.
+async function installModInModsFolder(api: types.IExtensionApi, files: string[], destinationPath: string, gameId: string, extensions: string[]): Promise<types.IInstallResult> {
+  const allowedExtensions = [...CPPMOD_EXTENSIONS, ...LUA_EXTENSIONS];
+
+  const isExtensionAllowed = extensions.some((extension) => {
+    if (allowedExtensions.includes(extension)) {
+      return true;
+    }
+  });
+
+  if (!isExtensionAllowed)
+  {
+    return Promise.reject('Failed to install mod, extension(s) provided are not allowed in Mods folder');
+  }
+
+  const modFiles = files.filter(file => extensions.includes(path.extname(file)));
+  // We want the mod with the shortest path first as we're going to use that
   //  to ascertain if the mod requires a parent directory added or not.
-  luaFiles.sort((a, b) => a.length - b.length);
-  const shortest = luaFiles[0];
+  modFiles.sort((a, b) => a.length - b.length);
+  const shortest = modFiles[0];
   const segments = shortest.split(path.sep);
 
   const modsSegmentIdx = segments.map(seg => !!seg && seg.toLowerCase()).indexOf('mods');
@@ -142,6 +151,32 @@ export async function installLuaMod(api: types.IExtensionApi, files: string[], d
     return accum;
   }, [attrInstr]);
   return Promise.resolve({ instructions });
+}
+//#endregion
+
+//#region LUA
+export async function testLuaMod(files: string[], gameId: string): Promise<types.ISupportedResult> {
+  const rightGame = gameId === GAME_ID;
+  const rightFile = files.some(file => LUA_EXTENSIONS.includes(path.extname(file)));
+  const supported = rightGame && rightFile;
+  return { supported, requiredFiles: [] };
+}
+
+export async function installLuaMod(api: types.IExtensionApi, files: string[], destinationPath: string, gameId: string): Promise<types.IInstallResult> {
+  return installModInModsFolder(api, files, destinationPath, gameId, LUA_EXTENSIONS);
+}
+//#endregion
+
+//#region CppMod
+export async function testCppMod(files: string[], gameId: string): Promise<types.ISupportedResult> {
+  const rightGame = gameId === GAME_ID;
+  const rightFile = files.some(file => CPPMOD_EXTENSIONS.includes(path.extname(file)));
+  const supported = rightGame && rightFile;
+  return { supported, requiredFiles: [] };
+}
+
+export async function installCppMod(api: types.IExtensionApi, files: string[], destinationPath: string, gameId: string): Promise<types.IInstallResult> {
+  return installModInModsFolder(api, files, destinationPath, gameId, CPPMOD_EXTENSIONS);
 }
 //#endregion
 

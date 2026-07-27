@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.3.0] - 2026-07-22
+
+- Added support for UE4SS C++ mods (which are deployed to the same location as Lua mods)
+
 ## [0.1.8] - 2024-02-27
 
 - Improved UE4SS test to ensure mods.txt.original is present (will inform user of corrupted UE4SS installation)

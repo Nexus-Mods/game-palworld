@@ -3,7 +3,8 @@ import path from 'path';
 import { log, selectors, types } from 'vortex-api';
 import {
   BPPAK_MODSFOLDER_PATH, PAK_MODSFOLDER_PATH,
-  PAK_EXTENSIONS, IGNORE_CONFLICTS, LUA_EXTENSIONS, UE_PAK_TOOL_FILES, MOD_TYPE_PAK, MOD_TYPE_BP_PAK
+  PAK_EXTENSIONS, IGNORE_CONFLICTS, LUA_EXTENSIONS, UE_PAK_TOOL_FILES, MOD_TYPE_PAK, MOD_TYPE_BP_PAK,
+  CPPMOD_EXTENSIONS
 } from './common';
 import { resolveUE4SSPath, findInstallFolderByFile } from './util';
 
@@ -118,6 +119,31 @@ export function testLUAPath(instructions: types.IInstruction[]): Promise<boolean
   const filtered = instructions
     .filter((inst: types.IInstruction) => (inst.type === 'copy')
       && (LUA_EXTENSIONS.includes(path.extname(inst.source as any))));
+
+  const supported = filtered.length > 0;
+  return Promise.resolve(supported) as any;
+}
+//#endregion
+
+//#region MOD_TYPE_CPPMOD
+export function getCppModPath(api: types.IExtensionApi, game: types.IGame) {
+  const discovery = selectors.discoveryByGame(api.getState(), game.id);
+  if (!discovery || !discovery.path) {
+    return '.';
+  }
+  const ue4ssPath = resolveUE4SSPath(api);
+  const cppPath = path.join(discovery.path, ue4ssPath);
+  return cppPath;
+}
+
+export function testCppModPath(instructions: types.IInstruction[]): Promise<boolean> {
+  if (hasModTypeInstruction(instructions)) {
+    return Promise.resolve(false);
+  }
+
+  const filtered = instructions
+    .filter((inst: types.IInstruction) => (inst.type === 'copy')
+      && (CPPMOD_EXTENSIONS.includes(path.extname(inst.source as any))));
 
   const supported = filtered.length > 0;
   return Promise.resolve(supported) as any;

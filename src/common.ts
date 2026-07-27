@@ -23,6 +23,7 @@ export const PAK_MODSFOLDER_PATH = path.join('Pal', 'Content', 'Paks', '~mods');
 export const BPPAK_MODSFOLDER_PATH = path.join('Pal', 'Content', 'Paks', 'LogicMods');
 
 export const LUA_EXTENSIONS = ['.lua'];
+export const CPPMOD_EXTENSIONS = ['.dll'];
 export const PAK_EXTENSIONS = ['.pak', '.utoc', '.ucas'];
 
 export const MODS_FILE = 'mods.txt';
@@ -65,6 +66,7 @@ export const TOP_LEVEL_DIRECTORIES = [
 export const MOD_TYPE_PAK = 'palworld-pak-modtype';
 export const MOD_TYPE_LUA = 'palworld-lua-modtype';
 export const MOD_TYPE_LUA_V2 = 'palworld-lua-modtype-v2';
+export const MOD_TYPE_CPP = 'palworld-cpp-modtype';
 export const MOD_TYPE_BP_PAK = 'palworld-blueprint-modtype';
 export const MOD_TYPE_UNREAL_PAK_TOOL = 'palworld-unreal-pak-tool-modtype';
 

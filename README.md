@@ -22,7 +22,7 @@ Coming Soon
 - Automatic game detection for Steam and Xbox
 - Downloads and installs UE4SS if it doesn't exist
 - Support for PAK mods
-- Support for Lua\UE4SS mods
+- Support for Lua and C++ UE4SS mods
 - Support for Blueprint\Logic mods
 
 # Installation
@@ -62,9 +62,9 @@ By default, Vortex will deploy files to the game's root folder and extracts the 
 
 If a PAK mod is detected, it's deployment folder is `\Pal\Content\Paks\~mods`.
 
-## Lua\UE4SS mods
+## Lua\C++ UE4SS mods
 
-If a LUA mod is detected, it's deployment folder is `\Pal\Binaries\Win64\Mods`.
+If a LUA or C++ mod is detected, it's deployment folder is `\Pal\Binaries\Win64\Mods`.
 
 Starting in v0.1.5 of the Palworld Extension, Lua mods are now added to the `\Pal\Binaries\Win64\Mods\mods.txt` as the primary method for UE4SS detecting that the mod is installed and enabled.
 
