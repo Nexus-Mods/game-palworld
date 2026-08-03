@@ -100,7 +100,7 @@ export async function removeModsFile(api: types.IExtensionApi): Promise<void> {
   const modFilePath = path.join(modPath, ue4ssRelPath, 'Mods', MODS_FILE);
   const exists = await fs.statAsync(modFilePath).then(() => true).catch((err) => false);
   if (exists) {
-    await fs.linkAsync(modFilePath, path.join(modPath, ue4ssRelPath, 'Mods', MODS_FILE_BACKUP));
+    await fs.copyAsync(modFilePath, path.join(modPath, ue4ssRelPath, 'Mods', MODS_FILE_BACKUP));
     await fs.unlinkAsync(modFilePath);
   }
 }

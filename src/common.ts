@@ -60,7 +60,7 @@ export const UE_PAK_TOOL_FILES = [
 ];
 
 export const TOP_LEVEL_DIRECTORIES = [
-  'Engine', 'Pal', 'Resources',
+  'Engine', 'Pal', 'Resources', 'Saved',
 ];
 
 export const MOD_TYPE_PAK = 'palworld-pak-modtype';
