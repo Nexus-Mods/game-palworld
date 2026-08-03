@@ -7,7 +7,8 @@ import { fs, log, types, selectors, util } from 'vortex-api';
 import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
   PAK_MODSFOLDER_PATH, STEAMAPP_ID, XBOX_EXECUTABLE, XBOX_ID,
   PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA, MOD_TYPE_BP_PAK,
-  BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, IGNORE_DEPLOY, MOD_TYPE_LUA_V2, MOD_TYPE_CPP
+  BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, IGNORE_DEPLOY, MOD_TYPE_LUA_V2, MOD_TYPE_CPP,
+  MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE, MOD_TYPE_INI
 } from './common';
 
 import { settingsReducer } from './reducers';
@@ -16,13 +17,17 @@ import { getStopPatterns } from './stopPatterns';
 import {
   getBPPakPath, getPakPath, testBPPakPath, testPakPath, testUnrealPakTool,
   getLUAPath, testLUAPath, getLUAPathV2, testLUAPathV2,
-  getCppModPath, testCppModPath
+  getCppModPath, testCppModPath,
+  testPalschemaFrameworkPath, testPalschemaSubmodulePath, getIniPath, testIniPath
 } from './modTypes';
-import { installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector, testCppMod, installCppMod } from './installers';
+import {
+  installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector, testCppMod, installCppMod,
+  testPalschemaFramework, installPalschemaFramework, testPalschemaSubmodule, installPalschemaSubmodule, testIniMod, installIniMod
+} from './installers';
 
 import { migrate } from './migrations';
 
-import { dismissNotifications, resolveUE4SSPath } from './util';
+import { dismissNotifications, resolveUE4SSPath, ensureEnabledTxtInModsFolders } from './util';
 import { download } from './downloader';
 
 import { onAddMod, onRemoveMod } from './modsFile';
@@ -114,10 +119,19 @@ function main(context: types.IExtensionContext) {
   context.registerInstaller('palworld-ue4ss', 10, testUE4SSInjector as any,
     (files, destinationPath, gameId) => installUE4SSInjector(context.api, files, destinationPath, gameId) as any);
 
+  context.registerInstaller('palworld-palschema-framework', 12, testPalschemaFramework as any,
+    (files, destinationPath, gameId) => installPalschemaFramework(context.api, files, destinationPath, gameId) as any);
+
+  context.registerInstaller('palworld-palschema-submodule', 14, testPalschemaSubmodule as any,
+    (files, destinationPath, gameId) => installPalschemaSubmodule(context.api, files, destinationPath, gameId) as any);
+
+  context.registerInstaller('palworld-ini-installer', 16, testIniMod as any,
+    (files, destinationPath, gameId) => installIniMod(context.api, files, destinationPath, gameId) as any);
+
   // Runs after UE4SS to ensure that we don't accidentally install UE4SS as a root mod.
   //  But must run before lua and pak installers to ensure we don't install a root mod
   //  as a lua mod.
-  context.registerInstaller('palworld-root-mod', 15, testRootMod as any,
+  context.registerInstaller('palworld-root-mod', 20, testRootMod as any,
     (files, destinationPath, gameId) => installRootMod(context.api, files, destinationPath, gameId) as any);
 
   context.registerInstaller('palworld-lua-installer', 30, testLuaMod as any,
@@ -145,6 +159,33 @@ function main(context: types.IExtensionContext) {
     (game: types.IGame) => getBPPakPath(context.api, game),
     (instructions: types.IInstruction[]) => testBPPakPath(context.api, instructions) as any,
     { deploymentEssential: true, name: 'Blueprint Mod' }
+  );
+
+  context.registerModType(
+    MOD_TYPE_PALSCHEMA_FRAMEWORK,
+    6,
+    (gameId) => GAME_ID === gameId,
+    (game: types.IGame) => getLUAPathV2(context.api, game),
+    testPalschemaFrameworkPath as any,
+    { deploymentEssential: true, name: 'PalSchema Framework' }
+  );
+
+  context.registerModType(
+    MOD_TYPE_PALSCHEMA_SUBMODULE,
+    7,
+    (gameId) => GAME_ID === gameId,
+    (game: types.IGame) => getLUAPathV2(context.api, game),
+    testPalschemaSubmodulePath as any,
+    { deploymentEssential: true, name: 'PalSchema Submodule' }
+  );
+
+  context.registerModType(
+    MOD_TYPE_INI,
+    8,
+    (gameId) => GAME_ID === gameId,
+    (game: types.IGame) => getIniPath(context.api, game),
+    testIniPath as any,
+    { deploymentEssential: true, name: 'Config INI Mod' }
   );
 
   context.registerModType(
@@ -236,7 +277,7 @@ async function onModsInstalled(api: types.IExtensionApi, gameId: string, modIds:
   const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
   for (const modId of modIds) {
     const mod = mods[modId];
-    if ([MOD_TYPE_LUA, MOD_TYPE_LUA_V2, MOD_TYPE_CPP].includes(mod?.type)) {
+    if ([MOD_TYPE_LUA, MOD_TYPE_LUA_V2, MOD_TYPE_CPP, MOD_TYPE_PALSCHEMA_FRAMEWORK].includes(mod?.type)) {
       await onAddMod(api, modId);
     } 
   }
@@ -280,6 +321,12 @@ async function onDidDeployEvent(api: types.IExtensionApi, profileId: string, dep
     log('warn', 'failed to deploy cpp mod', err);
   }
 
+  try {
+    await ensureEnabledTxtInModsFolders(api);
+  } catch (err) {
+    log('warn', 'failed to ensure enabled.txt in mods folders', err);
+  }
+
   return Promise.resolve();
 }
 
@@ -287,7 +334,7 @@ const isLuaMod = (mod: types.IMod) => {
   if (!mod?.type) {
     return false;
   }
-  return [MOD_TYPE_LUA, MOD_TYPE_LUA_V2].includes(mod.type);
+  return [MOD_TYPE_LUA, MOD_TYPE_LUA_V2, MOD_TYPE_PALSCHEMA_FRAMEWORK].includes(mod.type);
 }
 
 const isCppMod = (mod: types.IMod) => {

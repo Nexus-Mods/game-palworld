@@ -6,7 +6,7 @@ import { resolveUE4SSPath } from './util';
 
 export async function onAddMod(api: types.IExtensionApi, modId: string) {
   try {
-    await esureModsFileEntryAdded(api, modId);
+    await ensureModsFileEntryAdded(api, modId);
   } catch (err) {
     api.showErrorNotification('Failed to add mod to mods file', err);
   }
@@ -14,13 +14,17 @@ export async function onAddMod(api: types.IExtensionApi, modId: string) {
 
 export async function onRemoveMod(api: types.IExtensionApi, modId: string) {
   try {
-    await esureModsFileEntryRemoved(api, modId);
+    await ensureModsFileEntryRemoved(api, modId);
   } catch (err) {
     api.showErrorNotification('Failed to remove mod from mods file', err);
   }
 }
 
-async function esureModsFileEntryAdded(api: types.IExtensionApi, modId: string) {
+function escapeRegExp(str: string) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export async function ensureModsFileEntryAdded(api: types.IExtensionApi, modId: string) {
   let ue4ssModsFile;
   try {
     ue4ssModsFile = await ensureModsFile(api);
@@ -39,17 +43,27 @@ async function esureModsFileEntryAdded(api: types.IExtensionApi, modId: string) 
   }
   const folderId = mod.attributes?.palworldFolderId ?? mod.installationPath;
   const data = await fs.readFileAsync(ue4ssModsFile, { encoding: 'utf8' });
-  const lines: string[] = data.split(/\r\n/).filter(line => !!line);
-  const lineIndex = lines.findIndex(line => line.includes(`${folderId} : 1`));
-  if (lineIndex === - 1) {
-    lines.splice(-2, 0, `${folderId} : 1`);
-    await fs.writeFileAsync(ue4ssModsFile, lines.join('\r\n'), { encoding: 'utf8' });
+  const eol = data.includes('\r\n') ? '\r\n' : '\n';
+  const lines: string[] = data.split(/\r?\n/);
+  
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+    lines.pop();
   }
+
+  const entryRegex = new RegExp(`^\\s*${escapeRegExp(folderId)}\\s*:\\s*[01]`, 'i');
+  const lineIndex = lines.findIndex(line => entryRegex.test(line));
+  if (lineIndex !== -1) {
+    lines[lineIndex] = `${folderId} : 1`;
+  } else {
+    lines.push(`${folderId} : 1`);
+  }
+  lines.push('');
+  await fs.writeFileAsync(ue4ssModsFile, lines.join(eol), { encoding: 'utf8' });
   return;
 }
 
 // Obviously ensure you call this function while the mod entry is still installed!!
-async function esureModsFileEntryRemoved(api: types.IExtensionApi, modId: string) {
+export async function ensureModsFileEntryRemoved(api: types.IExtensionApi, modId: string) {
   // regardless of what happens next, the mods file needs to be updated.
   let ue4ssModsFile;
   try {
@@ -71,11 +85,21 @@ async function esureModsFileEntryRemoved(api: types.IExtensionApi, modId: string
   }
   const folderId = mod.attributes?.palworldFolderId ?? mod.installationPath;
   const data = await fs.readFileAsync(ue4ssModsFile, { encoding: 'utf8' });
-  const lines: string[] = data.split(/\r\n/);
-  const lineIndex = lines.findIndex(line => line.includes(`${folderId} : 1`));
-  if (lineIndex !== - 1) {
+  const eol = data.includes('\r\n') ? '\r\n' : '\n';
+  const lines: string[] = data.split(/\r?\n/);
+
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+    lines.pop();
+  }
+
+  const entryRegex = new RegExp(`^\\s*${escapeRegExp(folderId)}\\s*:\\s*[01]`, 'i');
+  const lineIndex = lines.findIndex(line => entryRegex.test(line));
+  if (lineIndex !== -1) {
     lines.splice(lineIndex, 1);
-    await fs.writeFileAsync(ue4ssModsFile, lines.join('\r\n'), { encoding: 'utf8' });
+    if (lines.length > 0) {
+      lines.push('');
+    }
+    await fs.writeFileAsync(ue4ssModsFile, lines.join(eol), { encoding: 'utf8' });
   }
   return;
 }

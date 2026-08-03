@@ -163,3 +163,55 @@ export function formatBytes(bytes, decimals = 2) {
 
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
 }
+
+export async function ensureEnabledTxtInModsFolders(api: types.IExtensionApi): Promise<void> {
+  const state = api.getState();
+  const discovery: types.IDiscoveryResult = selectors.discoveryByGame(state, GAME_ID);
+  if (!discovery?.path) return;
+
+  const ue4ssPath = resolveUE4SSPath(api);
+  const modsPath = path.join(discovery.path, ue4ssPath, 'Mods');
+  
+  const exists = await fs.statAsync(modsPath).then(() => true).catch(() => false);
+  if (!exists) return;
+
+  const entries = await fs.readdirAsync(modsPath).catch(() => [] as string[]);
+  for (const entry of entries) {
+    try {
+      const entryPath = path.join(modsPath, entry);
+      const stat = await fs.statAsync(entryPath).catch(() => null);
+      if (stat?.isDirectory()) {
+        const enabledFile = path.join(entryPath, 'enabled.txt');
+        const hasEnabled = await fs.statAsync(enabledFile).then(() => true).catch(() => false);
+        if (!hasEnabled) {
+          await fs.writeFileAsync(enabledFile, '', { encoding: 'utf8' }).catch(() => null);
+        }
+
+        if (entry.toLowerCase() === 'palschema') {
+          const palSchemaModsPath = path.join(entryPath, 'mods');
+          const subModsExists = await fs.statAsync(palSchemaModsPath).then(() => true).catch(() => false);
+          if (subModsExists) {
+            const subEntries = await fs.readdirAsync(palSchemaModsPath).catch(() => [] as string[]);
+            for (const subEntry of subEntries) {
+              try {
+                const subEntryPath = path.join(palSchemaModsPath, subEntry);
+                const subStat = await fs.statAsync(subEntryPath).catch(() => null);
+                if (subStat?.isDirectory()) {
+                  const subEnabledFile = path.join(subEntryPath, 'enabled.txt');
+                  const hasSubEnabled = await fs.statAsync(subEnabledFile).then(() => true).catch(() => false);
+                  if (!hasSubEnabled) {
+                    await fs.writeFileAsync(subEnabledFile, '', { encoding: 'utf8' }).catch(() => null);
+                  }
+                }
+              } catch (subErr) {
+                // Ignore subentry error
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      // Ignore entry error
+    }
+  }
+}

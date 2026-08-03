@@ -69,6 +69,11 @@ export const MOD_TYPE_LUA_V2 = 'palworld-lua-modtype-v2';
 export const MOD_TYPE_CPP = 'palworld-cpp-modtype';
 export const MOD_TYPE_BP_PAK = 'palworld-blueprint-modtype';
 export const MOD_TYPE_UNREAL_PAK_TOOL = 'palworld-unreal-pak-tool-modtype';
+export const MOD_TYPE_PALSCHEMA_FRAMEWORK = 'palworld-palschema-framework-modtype';
+export const MOD_TYPE_PALSCHEMA_SUBMODULE = 'palworld-palschema-submodule-modtype';
+export const MOD_TYPE_INI = 'palworld-ini-modtype';
+
+export const PALSCHEMA_SUBMODULE_FOLDERS = ['raw', 'items', 'blueprints', 'pals', 'translations'];
 
 export type PakModType = 'palworld-pak-modtype' | 'palworld-blueprint-modtype';
 
@@ -83,7 +88,7 @@ export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
     githubUrl: 'https://api.github.com/repos/Okaetsu/RE-UE4SS',
     findMod: (api: types.IExtensionApi) => findModByFile(api, '', UE4SS_SETTINGS_FILE),
     findDownloadId: (api: types.IExtensionApi) => findDownloadIdByPattern(api, PLUGIN_REQUIREMENTS[0]),
-    fileArchivePattern: new RegExp(/^UE4SS-Palworld/, 'i'),
+    fileArchivePattern: /^UE4SS-Palworld.*?(v?\d+\.\d+\.\d+)/i,
   },
   {
     archiveFileName: UE_PAK_TOOL_FILENAME,
