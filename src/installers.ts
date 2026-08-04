@@ -5,7 +5,8 @@ import path from 'path';
 import { MODS_FILE_BACKUP, GAME_ID, UE4SS_2_5_2_FILES, UE4SS_SETTINGS_FILE,
   UE4SS_PATH_PREFIX, XBOX_UE4SS_XINPUT_REPLACEMENT, MODS_FILE, LUA_EXTENSIONS,
   UE4SS_FOLDER, UE4SS_IDENTIFIERS, UE4SS_LOADER_FILES, UE4SS_VERSION_PATTERN, 
-  CPPMOD_EXTENSIONS} from './common';
+  CPPMOD_EXTENSIONS, PALSCHEMA_SUBMODULE_FOLDERS,
+  MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE } from './common';
 
 import { getTopLevelPatterns } from './stopPatterns';
 
@@ -91,6 +92,231 @@ export async function installUE4SSInjector(api: types.IExtensionApi, files: stri
   }
 
   instructions.push({ type: 'setmodtype', value: '' });
+  return { instructions };
+}
+//#endregion
+
+//#region PalSchema Framework
+export async function testPalschemaFramework(files: string[], gameId: string): Promise<types.ISupportedResult> {
+  const rightGame = gameId === GAME_ID;
+  if (!rightGame) return { supported: false, requiredFiles: [] };
+
+  const normalFiles = files.map(f => f.toLowerCase().replace(/\\/g, '/'));
+  const hasDllsMain = normalFiles.some(f => f.endsWith('dlls/main.dll'));
+  const hasScriptsMain = normalFiles.some(f => f.endsWith('scripts/main.lua'));
+  const hasEnabledTxt = files.some(f => path.basename(f).toLowerCase() === 'enabled.txt');
+  // A dlls/main.dll alone is NOT a reliable fingerprint: plain C++ mods (e.g.
+  //  ModIntegratedStorageCpp) ship the same layout. Require a path segment
+  //  literally named "palschema" (or a top-level folder literally named PalSchema)
+  //  before claiming a match.
+  const hasPalSchemaFolder = normalFiles.some(f => f.split('/').includes('palschema'));
+  const hasPalSchemaTopFolder = normalFiles.some(f => f.split('/')[0] === 'palschema');
+
+  const supported = hasDllsMain && (hasPalSchemaFolder || hasPalSchemaTopFolder) && (hasEnabledTxt || !hasScriptsMain);
+  return { supported, requiredFiles: [] };
+}
+
+export async function installPalschemaFramework(api: types.IExtensionApi, files: string[], destinationPath: string, gameId: string): Promise<types.IInstallResult> {
+  const setModInstr: types.IInstruction = {
+    type: 'setmodtype',
+    value: MOD_TYPE_PALSCHEMA_FRAMEWORK,
+  };
+
+  const attrInstr: types.IInstruction = {
+    type: 'attribute',
+    key: 'palworldFolderId',
+    value: 'PalSchema',
+  };
+
+  let hasEnabledTxt = false;
+
+  const instructions = files.reduce((accum, iter) => {
+    if (iter.endsWith(path.sep) || iter.endsWith('/') || path.extname(iter) === '') {
+      return accum;
+    }
+    if (path.basename(iter).toLowerCase() === 'enabled.txt') {
+      hasEnabledTxt = true;
+    }
+
+    const segments = iter.split(/[\\/]/);
+    if (segments[0]?.toLowerCase() === 'palschema') {
+      segments.shift();
+    }
+    const relPath = segments.join(path.sep);
+    const destination = path.join('Mods', 'PalSchema', relPath);
+
+    accum.push({
+      type: 'copy',
+      source: iter,
+      destination,
+    });
+    return accum;
+  }, [setModInstr, attrInstr]);
+
+  if (!hasEnabledTxt) {
+    instructions.push({
+      type: 'generatefile',
+      data: '',
+      destination: path.join('Mods', 'PalSchema', 'enabled.txt'),
+    });
+  }
+
+  return { instructions };
+}
+//#endregion
+
+//#region PalSchema Submodule
+export async function testPalschemaSubmodule(files: string[], gameId: string): Promise<types.ISupportedResult> {
+  const rightGame = gameId === GAME_ID;
+  if (!rightGame) return { supported: false, requiredFiles: [] };
+
+  const normalFiles = files.map(f => f.toLowerCase().replace(/\\/g, '/'));
+  // A PalSchema submodule is: data folders (raw/items/blueprints/pals/translations)
+  //  + optional placeholder main.lua/enabled.txt. Reject only things that make
+  //  it a *different* mod kind: a real Lua script (scripts/main.lua), a C++ mod
+  //  (dlls/), or a PAK.
+  const hasRealLuaScript = normalFiles.some(f => f.endsWith('scripts/main.lua'));
+  const hasDllsDir = normalFiles.some(f => f.includes('/dlls/'));
+  const hasPak = normalFiles.some(f => ['.pak', '.utoc', '.ucas'].some(ext => f.endsWith(ext)));
+  if (hasRealLuaScript || hasDllsDir || hasPak) return { supported: false, requiredFiles: [] };
+
+  const hasSubmoduleFolder = files.some(f => {
+    const segments = f.toLowerCase().split(/[\\/]/);
+    const dirSegments = segments.slice(0, -1);
+    return dirSegments.some(seg => PALSCHEMA_SUBMODULE_FOLDERS.includes(seg));
+  });
+
+  return { supported: hasSubmoduleFolder, requiredFiles: [] };
+}
+
+export async function installPalschemaSubmodule(api: types.IExtensionApi, files: string[], destinationPath: string, gameId: string): Promise<types.IInstallResult> {
+  const validFiles = files.filter(f => !f.endsWith(path.sep) && !f.endsWith('/') && path.extname(f) !== '');
+
+  // Some authors ship submodules with a full game-path prefix baked in, e.g.
+  //   Mods/PalSchema/mods/<Name>/...          (Multiclimate Shields)
+  //   Pal/Binaries/Win64/ue4ss/Mods/PalSchema/mods/<Name>/...  (True Monster Rancher)
+  // Find the "palschema/mods/" marker once and strip everything before it so
+  //  the submodule lands at Mods/PalSchema/mods/<Name>/...
+  const findMarker = (segments: string[]): number => {
+    for (let i = 0; i < segments.length - 1; i++) {
+      if (segments[i].toLowerCase() === 'palschema' && segments[i + 1].toLowerCase() === 'mods') {
+        return i + 2; // first index AFTER 'palschema/mods/'
+      }
+    }
+    return -1;
+  };
+
+  const segsOf = (f: string) => f.split(/[\\/]/);
+  const anySegs = validFiles.map(segsOf).find(s => findMarker(s) !== -1);
+  const markerIdx = anySegs !== undefined ? findMarker(anySegs) : -1;
+
+  // Establish the mod name + prefix stripping state.
+  let modName: string = undefined;
+  let hasMarker = false;
+  let detectedTopFolder: string = undefined;
+
+  if (markerIdx !== -1) {
+    const contentSegs = anySegs.slice(markerIdx);
+    const first = contentSegs[0];
+    if (first && !PALSCHEMA_SUBMODULE_FOLDERS.includes(first.toLowerCase())) {
+      modName = first;
+      hasMarker = true;
+    }
+  }
+
+  if (!modName) {
+    const firstSegments = validFiles.map(f => f.split(/[\\/]/)[0]);
+    const allSameTopFolder = firstSegments.length > 0 && firstSegments.every(s => s.toLowerCase() === firstSegments[0].toLowerCase());
+    const topFolderCandidate = firstSegments[0];
+    if (allSameTopFolder && topFolderCandidate && !PALSCHEMA_SUBMODULE_FOLDERS.includes(topFolderCandidate.toLowerCase())) {
+      modName = topFolderCandidate;
+      detectedTopFolder = topFolderCandidate;
+    }
+  }
+
+  if (!modName) {
+    const jsonFiles = validFiles.filter(f => ['.jsonc', '.json'].includes(path.extname(f).toLowerCase()));
+    if (jsonFiles.length > 0) {
+      const topJson = jsonFiles.find(f => f.split(/[\\/]/).length === 1);
+      const targetJson = topJson || jsonFiles[0];
+      modName = path.basename(targetJson, path.extname(targetJson));
+    }
+  }
+
+  if (!modName) {
+    modName = path.basename(destinationPath, '.installing');
+  }
+
+  const setModInstr: types.IInstruction = {
+    type: 'setmodtype',
+    value: MOD_TYPE_PALSCHEMA_SUBMODULE,
+  };
+
+  const attrInstr: types.IInstruction = {
+    type: 'attribute',
+    key: 'palworldFolderId',
+    value: modName,
+  };
+
+  let hasEnabledTxt = false;
+  let hasMainLua = false;
+
+  const instructions = validFiles.reduce((accum, iter) => {
+    const baseName = path.basename(iter).toLowerCase();
+    if (baseName === 'enabled.txt') hasEnabledTxt = true;
+    if (baseName === 'main.lua') hasMainLua = true;
+
+    let segments = iter.split(/[\\/]/);
+    if (hasMarker) {
+      const fileMarkerIdx = findMarker(segments);
+      if (fileMarkerIdx !== -1) {
+        if (segments[fileMarkerIdx]?.toLowerCase() === modName.toLowerCase()) {
+          segments = segments.slice(fileMarkerIdx + 1);
+        } else {
+          segments = segments.slice(fileMarkerIdx);
+        }
+      } else {
+        segments = [path.basename(iter)];
+      }
+    } else if (detectedTopFolder) {
+      if (segments[0].toLowerCase() === detectedTopFolder.toLowerCase() && segments.length > 1) {
+        segments = segments.slice(1);
+      } else {
+        segments = [path.basename(iter)];
+      }
+    }
+
+    if (segments.length === 0 || segments.every(s => !s)) {
+      segments = [path.basename(iter)];
+    }
+
+    const relPath = segments.join(path.sep);
+    const destination = path.join('Mods', 'PalSchema', 'mods', modName, relPath);
+
+    accum.push({
+      type: 'copy',
+      source: iter,
+      destination,
+    });
+    return accum;
+  }, [setModInstr, attrInstr]);
+
+  if (!hasEnabledTxt) {
+    instructions.push({
+      type: 'generatefile',
+      data: '',
+      destination: path.join('Mods', 'PalSchema', 'mods', modName, 'enabled.txt'),
+    });
+  }
+
+  if (!hasMainLua) {
+    instructions.push({
+      type: 'generatefile',
+      data: '-- PalSchema Submodule Placeholder\r\n',
+      destination: path.join('Mods', 'PalSchema', 'mods', modName, 'main.lua'),
+    });
+  }
+
   return { instructions };
 }
 //#endregion

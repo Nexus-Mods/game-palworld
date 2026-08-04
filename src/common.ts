@@ -69,6 +69,10 @@ export const MOD_TYPE_LUA_V2 = 'palworld-lua-modtype-v2';
 export const MOD_TYPE_CPP = 'palworld-cpp-modtype';
 export const MOD_TYPE_BP_PAK = 'palworld-blueprint-modtype';
 export const MOD_TYPE_UNREAL_PAK_TOOL = 'palworld-unreal-pak-tool-modtype';
+export const MOD_TYPE_PALSCHEMA_FRAMEWORK = 'palworld-palschema-framework-modtype';
+export const MOD_TYPE_PALSCHEMA_SUBMODULE = 'palworld-palschema-submodule-modtype';
+
+export const PALSCHEMA_SUBMODULE_FOLDERS = ['raw', 'items', 'blueprints', 'pals', 'translations'];
 
 export type PakModType = 'palworld-pak-modtype' | 'palworld-blueprint-modtype';
 

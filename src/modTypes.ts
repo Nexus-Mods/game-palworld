@@ -215,3 +215,30 @@ export function testUnrealPakTool(instructions: types.IInstruction[]): Promise<b
   return Promise.resolve(supported) as any;
 }
 //#endregion
+
+//#region MOD_TYPE_PALSCHEMA_FRAMEWORK
+export function testPalschemaFrameworkPath(instructions: types.IInstruction[]): Promise<boolean> {
+  if (hasModTypeInstruction(instructions)) {
+    return Promise.resolve(false);
+  }
+  // Must match the framework root (Mods/PalSchema/...) but NOT a submodule
+  //  (Mods/PalSchema/mods/<name>/...), otherwise submodules get mislabelled
+  //  as the framework type.
+  const supported = instructions.some(inst => {
+    if (inst.type !== 'copy') return false;
+    const dest = (inst.destination as string).replace(/\\/g, '/').toLowerCase();
+    return dest.startsWith('mods/palschema') && !dest.startsWith('mods/palschema/mods/');
+  });
+  return Promise.resolve(supported);
+}
+//#endregion
+
+//#region MOD_TYPE_PALSCHEMA_SUBMODULE
+export function testPalschemaSubmodulePath(instructions: types.IInstruction[]): Promise<boolean> {
+  if (hasModTypeInstruction(instructions)) {
+    return Promise.resolve(false);
+  }
+  const supported = instructions.some(inst => inst.type === 'copy' && (inst.destination as string).replace(/\\/g, '/').toLowerCase().startsWith('mods/palschema/mods/'));
+  return Promise.resolve(supported);
+}
+//#endregion
