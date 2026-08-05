@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.4.0] - 2026-08-05
+
+- Added support for the PalSchema framework, which is deployed to ue4ss/Mods/PalSchema and registered in mods.txt
+- Added support for PalSchema submodules, which are deployed to ue4ss/Mods/PalSchema/mods. Archives that ship a full game path are handled, and enabled.txt plus a placeholder main.lua are generated when missing
+- PalSchema submodules are detected from all 13 of the data folder names PalSchema supports (previously only 5, so mods using folders such as appearance were installed to the wrong location)
+
 ## [0.3.0] - 2026-07-22
 
 - Added support for UE4SS C++ mods (which are deployed to the same location as Lua mods)
