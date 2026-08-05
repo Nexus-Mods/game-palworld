@@ -5,7 +5,8 @@ import path from 'path';
 import { MODS_FILE_BACKUP, GAME_ID, UE4SS_2_5_2_FILES, UE4SS_SETTINGS_FILE,
   UE4SS_PATH_PREFIX, XBOX_UE4SS_XINPUT_REPLACEMENT, MODS_FILE, LUA_EXTENSIONS,
   UE4SS_FOLDER, UE4SS_IDENTIFIERS, UE4SS_LOADER_FILES, UE4SS_VERSION_PATTERN, 
-  CPPMOD_EXTENSIONS, PALSCHEMA_SUBMODULE_FOLDERS,
+  CPPMOD_EXTENSIONS, PALSCHEMA_SUBMODULE_FOLDERS, PALSCHEMA_DATA_EXTENSIONS,
+  PAK_EXTENSIONS, PAK_MODSFOLDER_PATH, UE4SS_PATH_PREFIX,
   MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE } from './common';
 
 import { getTopLevelPatterns } from './stopPatterns';
@@ -171,32 +172,63 @@ export async function testPalschemaSubmodule(files: string[], gameId: string): P
   if (!rightGame) return { supported: false, requiredFiles: [] };
 
   const normalFiles = files.map(f => f.toLowerCase().replace(/\\/g, '/'));
-  // A PalSchema submodule is: data folders (raw/items/blueprints/pals/translations)
-  //  + optional placeholder main.lua/enabled.txt. Reject only things that make
-  //  it a *different* mod kind: a real Lua script (scripts/main.lua), a C++ mod
-  //  (dlls/), or a PAK.
+  // A PalSchema submodule is: data folders (see PALSCHEMA_SUBMODULE_FOLDERS) + optional
+  //  placeholder main.lua/enabled.txt. Reject only things that make it a *different* mod
+  //  kind: a real Lua script (scripts/main.lua) or a C++ mod (dlls/).
   const hasRealLuaScript = normalFiles.some(f => f.endsWith('scripts/main.lua'));
   const hasDllsDir = normalFiles.some(f => f.includes('/dlls/'));
-  const hasPak = normalFiles.some(f => ['.pak', '.utoc', '.ucas'].some(ext => f.endsWith(ext)));
-  if (hasRealLuaScript || hasDllsDir || hasPak) return { supported: false, requiredFiles: [] };
+  if (hasRealLuaScript || hasDllsDir) return { supported: false, requiredFiles: [] };
 
-  const hasSubmoduleFolder = files.some(f => {
-    const segments = f.toLowerCase().split(/[\\/]/);
-    const dirSegments = segments.slice(0, -1);
-    return dirSegments.some(seg => PALSCHEMA_SUBMODULE_FOLDERS.includes(seg));
-  });
+  const inSubmoduleFolder = (filePath: string) => {
+    const segments = filePath.toLowerCase().split(/[\\/]/);
+    return segments.slice(0, -1).some(seg => PALSCHEMA_SUBMODULE_FOLDERS.includes(seg));
+  };
 
-  return { supported: hasSubmoduleFolder, requiredFiles: [] };
+  const hasSubmoduleFolder = files.some(inSubmoduleFolder);
+  if (!hasSubmoduleFolder) return { supported: false, requiredFiles: [] };
+
+  // Some authors ship a submodule and the PAK it depends on in one archive (e.g. Nexus
+  //  1135/988). We handle those, but a bare PAK mod that merely happens to have a folder
+  //  named items/ or resources/ full of textures is not a submodule - so when a PAK is
+  //  present, require actual PalSchema data too. PalSchema only ever loads .json/.jsonc.
+  const hasPak = normalFiles.some(f => PAK_EXTENSIONS.some(ext => f.endsWith(ext)));
+  if (hasPak) {
+    const hasSubmoduleData = files.some(f =>
+      PALSCHEMA_DATA_EXTENSIONS.includes(path.extname(f).toLowerCase()) && inSubmoduleFolder(f));
+    return { supported: hasSubmoduleData, requiredFiles: [] };
+  }
+
+  return { supported: true, requiredFiles: [] };
 }
 
 export async function installPalschemaSubmodule(api: types.IExtensionApi, files: string[], destinationPath: string, gameId: string): Promise<types.IInstallResult> {
+  const state = api.getState();
+  const discovery = selectors.discoveryByGame(state, gameId);
+  const architecture = discovery?.store === 'xbox' ? 'WinGDK' : 'Win64';
+
   const validFiles = files.filter(f => !f.endsWith(path.sep) && !f.endsWith('/') && path.extname(f) !== '');
+
+  // Some archives ship the PAK a submodule depends on alongside it (e.g. Nexus 1135/988).
+  //  Those two halves deploy to completely different roots, so split them here. Anything
+  //  already under a Content/Paks prefix travels with the PAK - .utoc/.ucas siblings must
+  //  sit beside their .pak.
+  const isPakFile = (f: string) => {
+    if (PAK_EXTENSIONS.includes(path.extname(f).toLowerCase())) {
+      return true;
+    }
+    const normal = f.toLowerCase().replace(/\\/g, '/');
+    return normal.includes('content/paks/');
+  };
+
+  const pakFiles = validFiles.filter(isPakFile);
+  const schemaFiles = validFiles.filter(f => !isPakFile(f));
 
   // Some authors ship submodules with a full game-path prefix baked in, e.g.
   //   Mods/PalSchema/mods/<Name>/...          (Multiclimate Shields)
-  //   Pal/Binaries/Win64/ue4ss/Mods/PalSchema/mods/<Name>/...  (True Monster Rancher)
-  // Find the "palschema/mods/" marker once and strip everything before it so
-  //  the submodule lands at Mods/PalSchema/mods/<Name>/...
+  //   Pal/Binaries/Win64/ue4ss/Mods/PalSchema/mods/<Name>/...  (Work Book Crafting EZ)
+  //   Pal/Binaries/Win64/Mods/PalSchema/mods/<Name>/...  (pre-UE4SS-3.0 layout, Nexus 1135)
+  // Find the "palschema/mods/" marker once and strip everything before it so the submodule
+  //  lands under the ue4ss Mods folder regardless of what the archive claimed.
   const findMarker = (segments: string[]): number => {
     for (let i = 0; i < segments.length - 1; i++) {
       if (segments[i].toLowerCase() === 'palschema' && segments[i + 1].toLowerCase() === 'mods') {
@@ -206,8 +238,10 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
     return -1;
   };
 
+  // Derive the name from the PalSchema half only - a PAK sitting at the archive root would
+  //  otherwise break the "all files share one top folder" check below.
   const segsOf = (f: string) => f.split(/[\\/]/);
-  const anySegs = validFiles.map(segsOf).find(s => findMarker(s) !== -1);
+  const anySegs = schemaFiles.map(segsOf).find(s => findMarker(s) !== -1);
   const markerIdx = anySegs !== undefined ? findMarker(anySegs) : -1;
 
   // Establish the mod name + prefix stripping state.
@@ -225,7 +259,7 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
   }
 
   if (!modName) {
-    const firstSegments = validFiles.map(f => f.split(/[\\/]/)[0]);
+    const firstSegments = schemaFiles.map(f => f.split(/[\\/]/)[0]);
     const allSameTopFolder = firstSegments.length > 0 && firstSegments.every(s => s.toLowerCase() === firstSegments[0].toLowerCase());
     const topFolderCandidate = firstSegments[0];
     if (allSameTopFolder && topFolderCandidate && !PALSCHEMA_SUBMODULE_FOLDERS.includes(topFolderCandidate.toLowerCase())) {
@@ -235,7 +269,7 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
   }
 
   if (!modName) {
-    const jsonFiles = validFiles.filter(f => ['.jsonc', '.json'].includes(path.extname(f).toLowerCase()));
+    const jsonFiles = schemaFiles.filter(f => PALSCHEMA_DATA_EXTENSIONS.includes(path.extname(f).toLowerCase()));
     if (jsonFiles.length > 0) {
       const topJson = jsonFiles.find(f => f.split(/[\\/]/).length === 1);
       const targetJson = topJson || jsonFiles[0];
@@ -258,10 +292,17 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
     value: modName,
   };
 
+  // Destinations are relative to the game root (see getGameRootPath) because the two halves
+  //  of a hybrid archive land in unrelated places. Resolving the architecture here rather
+  //  than via the modType path means a store change requires a reinstall - acceptable, since
+  //  switching store means a different game install anyway.
+  const submoduleRoot = path.join(UE4SS_PATH_PREFIX, architecture, UE4SS_FOLDER,
+                                  'Mods', 'PalSchema', 'mods', modName);
+
   let hasEnabledTxt = false;
   let hasMainLua = false;
 
-  const instructions = validFiles.reduce((accum, iter) => {
+  const instructions = schemaFiles.reduce((accum, iter) => {
     const baseName = path.basename(iter).toLowerCase();
     if (baseName === 'enabled.txt') hasEnabledTxt = true;
     if (baseName === 'main.lua') hasMainLua = true;
@@ -291,7 +332,7 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
     }
 
     const relPath = segments.join(path.sep);
-    const destination = path.join('Mods', 'PalSchema', 'mods', modName, relPath);
+    const destination = path.join(submoduleRoot, relPath);
 
     accum.push({
       type: 'copy',
@@ -301,11 +342,20 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
     return accum;
   }, [setModInstr, attrInstr]);
 
+  // The PAK half goes to ~mods by basename, flattening whatever prefix the archive used.
+  for (const iter of pakFiles) {
+    instructions.push({
+      type: 'copy',
+      source: iter,
+      destination: path.join(PAK_MODSFOLDER_PATH, path.basename(iter)),
+    });
+  }
+
   if (!hasEnabledTxt) {
     instructions.push({
       type: 'generatefile',
       data: '',
-      destination: path.join('Mods', 'PalSchema', 'mods', modName, 'enabled.txt'),
+      destination: path.join(submoduleRoot, 'enabled.txt'),
     });
   }
 
@@ -313,7 +363,7 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
     instructions.push({
       type: 'generatefile',
       data: '-- PalSchema Submodule Placeholder\r\n',
-      destination: path.join('Mods', 'PalSchema', 'mods', modName, 'main.lua'),
+      destination: path.join(submoduleRoot, 'main.lua'),
     });
   }
 

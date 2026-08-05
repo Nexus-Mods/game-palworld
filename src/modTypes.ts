@@ -234,11 +234,22 @@ export function testPalschemaFrameworkPath(instructions: types.IInstruction[]): 
 //#endregion
 
 //#region MOD_TYPE_PALSCHEMA_SUBMODULE
+// Submodules deploy from the game root rather than the ue4ss folder, because a single archive
+//  can carry both PalSchema data and the PAK it depends on, and those land in unrelated places.
+export function getGameRootPath(api: types.IExtensionApi, game: types.IGame) {
+  const discovery = selectors.discoveryByGame(api.getState(), game.id);
+  if (!discovery || !discovery.path) {
+    return '.';
+  }
+  return discovery.path;
+}
+
 export function testPalschemaSubmodulePath(instructions: types.IInstruction[]): Promise<boolean> {
   if (hasModTypeInstruction(instructions)) {
     return Promise.resolve(false);
   }
-  const supported = instructions.some(inst => inst.type === 'copy' && (inst.destination as string).replace(/\\/g, '/').toLowerCase().startsWith('mods/palschema/mods/'));
+  const supported = instructions.some(inst => inst.type === 'copy'
+    && (inst.destination as string).replace(/\\/g, '/').toLowerCase().includes('ue4ss/mods/palschema/mods/'));
   return Promise.resolve(supported);
 }
 //#endregion

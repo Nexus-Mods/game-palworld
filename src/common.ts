@@ -82,6 +82,9 @@ export const PALSCHEMA_SUBMODULE_FOLDERS = [
   'pals', 'raw', 'resources', 'skins', 'spawns', 'translations',
 ];
 
+// The only file types PalSchema parses; everything else in a mod folder is inert to it.
+export const PALSCHEMA_DATA_EXTENSIONS = ['.json', '.jsonc'];
+
 export type PakModType = 'palworld-pak-modtype' | 'palworld-blueprint-modtype';
 
 export const UE4SS_XINPUT_FILENAME = 'UE4SS_v3.0.0.zip';

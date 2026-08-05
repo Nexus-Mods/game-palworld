@@ -18,7 +18,7 @@ import {
   getBPPakPath, getPakPath, testBPPakPath, testPakPath, testUnrealPakTool,
   getLUAPath, testLUAPath, getLUAPathV2, testLUAPathV2,
   getCppModPath, testCppModPath,
-  testPalschemaFrameworkPath, testPalschemaSubmodulePath
+  testPalschemaFrameworkPath, testPalschemaSubmodulePath, getGameRootPath
 } from './modTypes';
 import {
   installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector, testCppMod, installCppMod,
@@ -178,7 +178,7 @@ function main(context: types.IExtensionContext) {
     MOD_TYPE_PALSCHEMA_SUBMODULE,
     7,
     (gameId) => GAME_ID === gameId,
-    (game: types.IGame) => getLUAPathV2(context.api, game),
+    (game: types.IGame) => getGameRootPath(context.api, game),
     testPalschemaSubmodulePath as any,
     { deploymentEssential: true, name: 'PalSchema Submodule' }
   );
