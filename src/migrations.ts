@@ -4,8 +4,8 @@ import { actions, fs, selectors, types, util } from 'vortex-api';
 
 import { setPalworldMigrationVersion } from './actions';
 
-import { GAME_ID, PLUGIN_REQUIREMENTS, MODS_FILE, MODS_FILE_BACKUP, MOD_TYPE_LUA_V2, UE4SS_PATH_PREFIX, MOD_TYPE_LUA, MOD_TYPE_CPP } from './common';
-import { resolveUE4SSPath, runStagingOperationOnMod } from './util';
+import { GAME_ID, MODS_FILE, MODS_FILE_BACKUP, MOD_TYPE_LUA_V2, UE4SS_PATH_PREFIX, MOD_TYPE_LUA, MOD_TYPE_CPP, REQUIREMENT_UE4SS, getRequirement } from './common';
+import { findRequirementMod, pathExists, resolveUE4SSPath, runStagingOperationOnMod } from './util';
 
 const MIGRATIONS = {
   '0.1.5': migrate015,
@@ -46,8 +46,7 @@ export async function migrate019(api: types.IExtensionApi): Promise<void> {
   const oldPath = path.join(discovery.path, UE4SS_PATH_PREFIX, architecture, 'Mods');
   const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
   const batchedActions = [];
-  const oldPathExists = await fs.statAsync(oldPath).then(() => true).catch(() => false);
-  if (!oldPathExists) {
+  if (!await pathExists(oldPath)) {
     // Nothing to do here.
     return;
   }
@@ -77,8 +76,7 @@ export async function migrate019(api: types.IExtensionApi): Promise<void> {
 }
 
 export async function migrate015(api: types.IExtensionApi): Promise<void> {
-  const requirement = PLUGIN_REQUIREMENTS[0];
-  const mod: types.IMod = await requirement.findMod(api);
+  const mod: types.IMod = await findRequirementMod(api, getRequirement(REQUIREMENT_UE4SS));
   if (mod?.id) {
     await runStagingOperationOnMod(api, mod.id, removeModsFile);
   }
@@ -87,8 +85,7 @@ export async function migrate015(api: types.IExtensionApi): Promise<void> {
 
 // Something tells me this is going to be used perfusely.
 export async function removeModsFile(api: types.IExtensionApi): Promise<void> {
-  const requirement = PLUGIN_REQUIREMENTS[0];
-  const ue4ssMod = await requirement.findMod(api);
+  const ue4ssMod = await findRequirementMod(api, getRequirement(REQUIREMENT_UE4SS));
   if (!ue4ssMod) {
     // You lucky dog.
     return;
@@ -98,8 +95,7 @@ export async function removeModsFile(api: types.IExtensionApi): Promise<void> {
   const modPath = path.join(staging, (await ue4ssMod).installationPath);
   const ue4ssRelPath = resolveUE4SSPath(api);
   const modFilePath = path.join(modPath, ue4ssRelPath, 'Mods', MODS_FILE);
-  const exists = await fs.statAsync(modFilePath).then(() => true).catch((err) => false);
-  if (exists) {
+  if (await pathExists(modFilePath)) {
     await fs.linkAsync(modFilePath, path.join(modPath, ue4ssRelPath, 'Mods', MODS_FILE_BACKUP));
     await fs.unlinkAsync(modFilePath);
   }
