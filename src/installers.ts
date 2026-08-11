@@ -6,7 +6,7 @@ import { MODS_FILE_BACKUP, GAME_ID, UE4SS_2_5_2_FILES, UE4SS_SETTINGS_FILE,
   UE4SS_PATH_PREFIX, XBOX_UE4SS_XINPUT_REPLACEMENT, MODS_FILE, LUA_EXTENSIONS,
   UE4SS_FOLDER, UE4SS_IDENTIFIERS, UE4SS_LOADER_FILES, UE4SS_VERSION_PATTERN, 
   CPPMOD_EXTENSIONS, PALSCHEMA_SUBMODULE_FOLDERS, PALSCHEMA_DATA_EXTENSIONS,
-  PAK_EXTENSIONS, PAK_MODSFOLDER_PATH, UE4SS_PATH_PREFIX,
+  PAK_EXTENSIONS, PAK_MODSFOLDER_PATH,
   MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE } from './common';
 
 import { getTopLevelPatterns } from './stopPatterns';
@@ -139,11 +139,13 @@ export async function installPalschemaFramework(api: types.IExtensionApi, files:
       hasEnabledTxt = true;
     }
 
+    // Strip everything up to and including the framework's own folder, so archives that
+    //  bake in a game path (Mods/PalSchema/..., Pal/Binaries/<arch>/ue4ss/Mods/PalSchema/...)
+    //  land in the same place as one that ships a plain PalSchema folder.
     const segments = iter.split(/[\\/]/);
-    if (segments[0]?.toLowerCase() === 'palschema') {
-      segments.shift();
-    }
-    const relPath = segments.join(path.sep);
+    const palschemaIdx = segments.findIndex(seg => seg.toLowerCase() === 'palschema');
+    const relSegments = (palschemaIdx !== -1) ? segments.slice(palschemaIdx + 1) : segments;
+    const relPath = (relSegments.length > 0) ? relSegments.join(path.sep) : path.basename(iter);
     const destination = path.join('Mods', 'PalSchema', relPath);
 
     accum.push({
