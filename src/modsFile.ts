@@ -1,8 +1,8 @@
 /* eslint-disable */
 import path from 'path';
 import { types, selectors, fs, util } from 'vortex-api';
-import { MODS_FILE, GAME_ID, PLUGIN_REQUIREMENTS, MODS_FILE_BACKUP } from './common';
-import { resolveUE4SSPath } from './util';
+import { MODS_FILE, GAME_ID, MODS_FILE_BACKUP, REQUIREMENT_UE4SS, getRequirement } from './common';
+import { findRequirementMod, pathExists, resolveUE4SSPath } from './util';
 
 export async function onAddMod(api: types.IExtensionApi, modId: string) {
   try {
@@ -86,21 +86,20 @@ export async function ensureModsFile(api: types.IExtensionApi): Promise<string> 
   if (discovery?.path === undefined) {
     throw new util.NotFound(GAME_ID);
   }
-  const requirement = PLUGIN_REQUIREMENTS[0];
-  const mod = await requirement.findMod(api);
+  const ue4ssPath = resolveUE4SSPath(api);
+  const modsFilePath = path.join(discovery.path, ue4ssPath, 'Mods', MODS_FILE);
+  if (await pathExists(modsFilePath)) {
+    // Covers user-managed UE4SS installations too - no Vortex-managed mod required.
+    return modsFilePath;
+  }
+  const requirement = getRequirement(REQUIREMENT_UE4SS);
+  const mod = await findRequirementMod(api, requirement);
   if (!mod) {
     throw new util.NotFound(requirement.userFacingName);
   }
-  const ue4ssPath = resolveUE4SSPath(api);
-  const relPath = path.join(ue4ssPath, 'Mods', MODS_FILE);
-  const modsFilePath = path.join(discovery.path, relPath);
-  const exists = await fs.statAsync(modsFilePath).then(() => true).catch(() => false);
-  if (!exists) {
-    const staging = selectors.installPathForGame(state, GAME_ID);
-    const modsFileBackup = path.join(staging, mod.installationPath, MODS_FILE_BACKUP);
-    await fs.copyAsync(modsFileBackup, modsFilePath);
-  }
-
+  const staging = selectors.installPathForGame(state, GAME_ID);
+  const modsFileBackup = path.join(staging, mod.installationPath, MODS_FILE_BACKUP);
+  await fs.copyAsync(modsFileBackup, modsFilePath);
   return modsFilePath;
 }
 

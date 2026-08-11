@@ -1,15 +1,19 @@
 /* eslint-disable */
 import path from 'path';
-import semver from 'semver';
-import { fs, log, selectors, types, util } from 'vortex-api';
+import { actions, fs, selectors, types, util } from 'vortex-api';
 import turbowalk, { IWalkOptions, IEntry } from 'turbowalk';
 
 import { UE4SS_PATH_PREFIX, GAME_ID,
-  NOTIF_ID_BP_MODLOADER_DISABLED, PLUGIN_REQUIREMENTS,
-  MOD_TYPE_UNREAL_PAK_TOOL, NOTIF_ID_UE4SS_UPDATE,
+  NOTIF_ID_BP_MODLOADER_DISABLED, REQUIREMENT_PAK_TOOL,
+  NOTIF_ID_UE4SS_UPDATE, getRequirement,
+  UE4SS_DLL, UE4SS_LOADER_FILES, UE_PAK_TOOL_FILES,
 } from './common';
 
 import { IPluginRequirement } from './types';
+
+export function pathExists(filePath: string): Promise<boolean> {
+  return fs.statAsync(filePath).then(() => true).catch(() => false);
+}
 
 export function resolveUE4SSPath(api: types.IExtensionApi): string {
   const state = api.getState();
@@ -19,81 +23,126 @@ export function resolveUE4SSPath(api: types.IExtensionApi): string {
 }
 
 export async function resolveUnrealPakToolPath(api: types.IExtensionApi): Promise<string | null> {
-  const state = api.getState();
-  const requirement = PLUGIN_REQUIREMENTS.find(req => req.modType === MOD_TYPE_UNREAL_PAK_TOOL);
-  if (!requirement) {
+  const mod = await findRequirementMod(api, getRequirement(REQUIREMENT_PAK_TOOL));
+  if (!mod) {
     return null;
   }
-  const mod: types.IMod = await requirement.findMod(api);
-  if (mod) {
-    const stagingFolder = selectors.installPathForGame(state, GAME_ID);
-    return path.join(stagingFolder, mod.installationPath);
+  const stagingFolder = selectors.installPathForGame(api.getState(), GAME_ID);
+  return path.join(stagingFolder, mod.installationPath);
+}
+
+// The archive nests the tool in an "UnrealPakTool" folder, but Vortex's default installer
+//  flattens a redundant top-level folder, so the executable sits at either depth depending
+//  on which version installed it. Walk as a last resort so any layout still resolves.
+export async function resolveUnrealPakToolExecutable(api: types.IExtensionApi): Promise<string | null> {
+  const modPath = await resolveUnrealPakToolPath(api);
+  if (!modPath) {
+    return null;
   }
-}
-
-export async function resolveVersionByPattern(api: types.IExtensionApi, requirement: IPluginRequirement): Promise<string> {
-  const state = api.getState();
-  const files: types.IDownload[] = util.getSafe(state, ['persistent', 'downloads', 'files'], []);
-  const latestVersion = Object.values(files).reduce((prev, file) => {
-    const match = requirement.fileArchivePattern.exec(file.localPath);
-    if (match?.[1] && !semver.satisfies(`^${match[1]}`, prev)) {
-      prev = match[1];
+  const executable = UE_PAK_TOOL_FILES[0];
+  const candidates = [
+    path.join(modPath, executable),
+    path.join(modPath, 'UnrealPakTool', executable),
+  ];
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) {
+      return candidate;
     }
-    return prev;
-  }, '0.0.0');
-  return latestVersion;
+  }
+  const files = await walkPath(modPath);
+  const found = files.find(file => path.basename(file.filePath).toLowerCase() === executable.toLowerCase());
+  return found?.filePath ?? null;
 }
 
-export function getEnabledMods(api: types.IExtensionApi, modType: string): types.IMod[] {
+export function isModEnabled(api: types.IExtensionApi, modId: string): boolean {
   const state = api.getState();
-  const mods = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
   const profileId = selectors.lastActiveProfileForGame(state, GAME_ID);
-  const profile = util.getSafe(state, ['persistent', 'profiles', profileId], {});
-  const isEnabled = (modId) => util.getSafe(profile, ['modState', modId, 'enabled'], false);
-  return Object.values(mods).filter((mod: types.IMod) => isEnabled(mod.id) && (mod.type === modType || mod.type === '')) as types.IMod[];
+  return selectors.profileById(state, profileId)?.modState?.[modId]?.enabled ?? false;
 }
 
-export async function findModByFile(api: types.IExtensionApi, modType: string, fileName: string): Promise<types.IMod> {
-  const mods = getEnabledMods(api, modType);
-  const installationPath = selectors.installPathForGame(api.getState(), GAME_ID);
-  for (const mod of mods) {
-    const modPath = path.join(installationPath, mod.installationPath);
-    const files = await walkPath(modPath);
-    if (files.some(file => path.basename(file.filePath).toLowerCase() === path.basename(fileName).toLowerCase())) {
-      return mod;
-    }
+// Cheap recognition: the identity we stamp at install time, or a display name this
+//  and older extension versions assigned.
+export function matchesRequirement(mod: types.IMod, requirement: IPluginRequirement): boolean {
+  if (mod?.attributes?.['palworldRequirement'] === requirement.attributeId) {
+    return true;
   }
-  return undefined;
+  const knownNames = [requirement.userFacingName, ...(requirement.legacyNames ?? [])];
+  return knownNames.includes(mod?.attributes?.['customFileName']);
 }
 
-export function findDownloadIdByPattern(api: types.IExtensionApi, requirement: IPluginRequirement): string | null {
-  if (!requirement.fileArchivePattern) {
-    log('warn', `no fileArchivePattern defined for ${requirement.archiveFileName}`, 'findDownloadIdByPattern');
-    return null;
+// All installed mods (regardless of enable-state) that could be an instance of the
+//  given requirement. Mods only the staging-folder walk recognises get the identity
+//  attribute stamped, so subsequent lookups take the cheap path.
+export async function findRequirementMods(api: types.IExtensionApi, requirement: IPluginRequirement): Promise<types.IMod[]> {
+  const state = api.getState();
+  const mods = state.persistent?.mods?.[GAME_ID] ?? {};
+  const candidates = Object.values(mods).filter(mod => mod.type === requirement.modType);
+
+  const named = candidates.filter(mod => matchesRequirement(mod, requirement));
+  if (named.length > 0) {
+    return named;
   }
-  const state = api.getState();
-  const downloads: { [dlId: string]: types.IDownload } = util.getSafe(state, ['persistent', 'downloads', 'files'], {});
-  const id: string | null = Object.entries(downloads).reduce((prev: string | null, [dlId, dl]: [string, types.IDownload]) => {
-    if (!prev && !!requirement.fileArchivePattern) {
-      const match = requirement.fileArchivePattern.exec(dl.localPath);
-      if (match) {
-        prev = dlId;
-      }
-    }
-    return prev;
-  }, null);
-  return id;
+
+  if (!requirement.identifierFile) {
+    return [];
+  }
+  const identifierFile = requirement.identifierFile.toLowerCase();
+  const installationPath = selectors.installPathForGame(state, GAME_ID);
+  const found = await Promise.all(candidates.map(async mod => {
+    const files = await walkPath(path.join(installationPath, mod.installationPath));
+    return files.some(file => path.basename(file.filePath).toLowerCase() === identifierFile) ? mod : undefined;
+  }));
+  const result = found.filter(mod => mod !== undefined);
+  if (result.length > 0) {
+    util.batchDispatch(api.store, result.map(mod =>
+      actions.setModAttribute(GAME_ID, mod.id, 'palworldRequirement', requirement.attributeId)));
+  }
+  return result;
 }
 
-export function findDownloadIdByFile(api: types.IExtensionApi, fileName: string): string {
+// Best single candidate: an enabled copy wins, otherwise the most recently installed.
+export function pickRequirementMod(api: types.IExtensionApi, candidates: types.IMod[]): types.IMod {
+  const installTime = (mod: types.IMod) => {
+    const time = Date.parse(mod.attributes?.['installTime']);
+    return Number.isNaN(time) ? 0 : time;
+  };
+  return candidates.find(mod => isModEnabled(api, mod.id))
+    ?? candidates.reduce((best, mod) => installTime(mod) > installTime(best) ? mod : best, candidates[0]);
+}
+
+export async function findRequirementMod(api: types.IExtensionApi, requirement: IPluginRequirement): Promise<types.IMod> {
+  return pickRequirementMod(api, await findRequirementMods(api, requirement));
+}
+
+// A UE4SS installation the user set up themselves (https://pwmodding.wiki/docs/users/ue4ss/installation):
+//  the "ue4ss" payload folder and/or a proxy loader DLL inside Pal/Binaries/<arch>/.
+//  Only meaningful when no Vortex-managed UE4SS mod exists - deployed files would
+//  otherwise be our own. ensureModsFile applies the same idea to mods.txt.
+export async function isUE4SSDeployedUnmanaged(api: types.IExtensionApi): Promise<boolean> {
   const state = api.getState();
-  const downloads: { [dlId: string]: types.IDownload } = util.getSafe(state, ['persistent', 'downloads', 'files'], {});
-  return Object.entries(downloads).reduce((prev, [dlId, dl]) => {
-    if (path.basename(dl.localPath).toLowerCase() === fileName.toLowerCase()) {
-      prev = dlId;
-    }
-    return prev;
-  }, '');
+  const discovery = selectors.discoveryByGame(state, GAME_ID);
+  if (!discovery?.path) {
+    return false;
+  }
+  const ue4ssPath = path.join(discovery.path, resolveUE4SSPath(api));
+  if (await pathExists(path.join(ue4ssPath, UE4SS_DLL))) {
+    return true;
+  }
+  const binariesPath = path.dirname(ue4ssPath);
+  const loaders = await Promise.all(UE4SS_LOADER_FILES.map(loader =>
+    pathExists(path.join(binariesPath, loader))));
+  return loaders.includes(true);
+}
+
+// Id of a finished download holding this requirement's archive, if we already have one.
+export function findRequirementDownload(api: types.IExtensionApi, requirement: IPluginRequirement): string | null {
+  const downloads = api.getState().persistent?.downloads?.files ?? {};
+  const matches = (localPath: string) => (requirement.fileArchivePattern !== undefined)
+    ? requirement.fileArchivePattern.test(localPath)
+    : path.basename(localPath).toLowerCase() === requirement.archiveFileName.toLowerCase();
+  const entry = Object.entries(downloads)
+    .find(([, dl]) => !!dl.localPath && matches(dl.localPath));
+  return entry?.[0] ?? null;
 }
 
 // This function is used to find the mod folder of a mod which is still in the installation phase.

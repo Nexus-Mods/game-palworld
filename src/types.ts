@@ -21,6 +21,7 @@ export interface IPakExtractionInfo {
 
 export interface IGitHubRelease {
   url: string;
+  html_url: string;
   id: number;
   tag_name: string;
   name: string;
@@ -50,20 +51,33 @@ export interface IGithubDownload {
 export type GamesMap = { [gameId: string]: ModsMap };
 export type ModsMap = { [modId: string]: types.IMod };
 
+// Subset of Vortex's IRemoveModOptions used by the removal handler. Vortex leaves
+//  reason unset for direct user actions and sets one for removals it drives itself
+//  (version_update, profile_replace, stop_managing_game, collection_*, health_check).
+export interface IRemoveModOptions {
+  reason?: string;
+  willBeReplaced?: boolean;
+}
+
 export type PluginRequirements = { [storeId: string]: IPluginRequirement[] }
 export interface IPluginRequirement {
+  // Name of both the GitHub release asset and the local archive, matched case-insensitively.
   archiveFileName: string;
   modType: string;
-  assemblyFileName?: string;
-  modId?: number;
+  // Stable identity, stamped onto the mod as attributes.palworldRequirement.
+  attributeId: string;
+  // customFileName values older extension versions gave this requirement's mods.
+  legacyNames?: string[];
+  // File identifying this requirement inside a mod's staging folder.
+  identifierFile?: string;
   userFacingName?: string;
   githubUrl?: string;
-  modUrl?: string;
+  // Matches local download archives, including Vortex-suffixed re-downloads.
   fileArchivePattern?: RegExp;
-  findMod: (api: types.IExtensionApi) => Promise<types.IMod>;
-  findDownloadId: (api: types.IExtensionApi) => string;
-  resolveVersion?: (api: types.IExtensionApi) => Promise<string>;
-  fileFilter?: (file: string) => boolean;
+  // Enables the notify-only update check.
+  notifyUpdates?: boolean;
+  // Reports the requirement as satisfied without a Vortex-managed mod.
+  isSatisfiedExternally?: (api: types.IExtensionApi) => Promise<boolean>;
 }
 
 export interface ISerializableData {

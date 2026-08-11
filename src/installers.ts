@@ -4,8 +4,9 @@ import path from 'path';
 
 import { MODS_FILE_BACKUP, GAME_ID, UE4SS_2_5_2_FILES, UE4SS_SETTINGS_FILE,
   UE4SS_PATH_PREFIX, XBOX_UE4SS_XINPUT_REPLACEMENT, MODS_FILE, LUA_EXTENSIONS,
-  UE4SS_FOLDER, UE4SS_IDENTIFIERS, UE4SS_LOADER_FILES, UE4SS_VERSION_PATTERN, 
-  CPPMOD_EXTENSIONS, PALSCHEMA_SUBMODULE_FOLDERS, PALSCHEMA_DATA_EXTENSIONS,
+  UE4SS_FOLDER, UE4SS_IDENTIFIERS, UE4SS_LOADER_FILES, UE4SS_VERSION_PATTERN,
+  CPPMOD_EXTENSIONS, UE_PAK_TOOL_FILES,
+  PALSCHEMA_SUBMODULE_FOLDERS, PALSCHEMA_DATA_EXTENSIONS,
   PAK_EXTENSIONS, PAK_MODSFOLDER_PATH,
   MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE } from './common';
 
@@ -449,7 +450,11 @@ export async function installLuaMod(api: types.IExtensionApi, files: string[], d
 export async function testCppMod(files: string[], gameId: string): Promise<types.ISupportedResult> {
   const rightGame = gameId === GAME_ID;
   const rightFile = files.some(file => CPPMOD_EXTENSIONS.includes(path.extname(file)));
-  const supported = rightGame && rightFile;
+  // The Unreal Pak Tool ships a bundle of UnrealPak-*.dll files but is not a cpp mod:
+  //  it must keep the archive's own layout, which is where listPak looks for the
+  //  executable. Deploying it into the ue4ss Mods folder breaks pak inspection.
+  const isPakTool = files.some(file => UE_PAK_TOOL_FILES.includes(path.basename(file)));
+  const supported = rightGame && rightFile && !isPakTool;
   return { supported, requiredFiles: [] };
 }
 
