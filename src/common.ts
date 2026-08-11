@@ -1,14 +1,15 @@
 /* eslint-disable */
 import path from 'path';
-import { types } from 'vortex-api';
 import { IPluginRequirement } from './types';
-import { findDownloadIdByFile, findModByFile, findDownloadIdByPattern } from './util';
+import { isUE4SSDeployedUnmanaged } from './util';
 
 export const NAMESPACE = 'game-palworld';
 
 export const NOTIF_ID_BP_MODLOADER_DISABLED = 'notif-palworld-bp-modloader-disabled';
 export const NOTIF_ID_REQUIREMENTS = 'palworld-requirements-download-notification';
 export const NOTIF_ID_UE4SS_UPDATE = 'palworld-ue4ss-version-update';
+export const NOTIF_ID_REQUIREMENTS_OPTOUT = 'palworld-requirements-optout';
+export const NOTIF_ID_REQUIREMENTS_DUPLICATES = 'palworld-requirements-duplicates';
 
 export const DEFAULT_EXECUTABLE = 'Palworld.exe'; // path to executable, relative to game root
 export const XBOX_EXECUTABLE = 'gamelaunchhelper.exe';
@@ -72,25 +73,36 @@ export const MOD_TYPE_UNREAL_PAK_TOOL = 'palworld-unreal-pak-tool-modtype';
 
 export type PakModType = 'palworld-pak-modtype' | 'palworld-blueprint-modtype';
 
-export const UE4SS_XINPUT_FILENAME = 'UE4SS_v3.0.0.zip';
+export const UE4SS_FILENAME = 'UE4SS-Palworld.zip';
 export const UE_PAK_TOOL_FILENAME = 'UnrealPakTool.zip';
+export const REQUIREMENT_UE4SS = 'ue4ss';
+export const REQUIREMENT_PAK_TOOL = 'unrealpaktool';
 export const PLUGIN_REQUIREMENTS: IPluginRequirement[] = [
   {
-    archiveFileName: UE4SS_XINPUT_FILENAME,
+    archiveFileName: UE4SS_FILENAME,
     modType: '',
-    assemblyFileName: UE4SS_DWMAPI,
-    userFacingName: 'UE4 Scripting System',
+    attributeId: REQUIREMENT_UE4SS,
+    legacyNames: ['UE4 Scripting System'],
+    identifierFile: UE4SS_SETTINGS_FILE,
+    userFacingName: 'UE4SS (Okaetsu RE-UE4SS)',
     githubUrl: 'https://api.github.com/repos/Okaetsu/RE-UE4SS',
-    findMod: (api: types.IExtensionApi) => findModByFile(api, '', UE4SS_SETTINGS_FILE),
-    findDownloadId: (api: types.IExtensionApi) => findDownloadIdByPattern(api, PLUGIN_REQUIREMENTS[0]),
-    fileArchivePattern: new RegExp(/^UE4SS-Palworld/, 'i'),
+    notifyUpdates: true,
+    isSatisfiedExternally: (api) => isUE4SSDeployedUnmanaged(api),
+    // Matches the Okaetsu release asset (and Vortex-suffixed re-downloads of it) while
+    //  rejecting the UE4SS-Palworld_zDev.zip dev build.
+    fileArchivePattern: new RegExp(/^UE4SS-Palworld(?!_zDev).*\.zip$/, 'i'),
   },
   {
     archiveFileName: UE_PAK_TOOL_FILENAME,
     modType: MOD_TYPE_UNREAL_PAK_TOOL,
+    attributeId: REQUIREMENT_PAK_TOOL,
+    identifierFile: UE_PAK_TOOL_FILES[0],
     userFacingName: 'Unreal Pak Tool',
     githubUrl: 'https://api.github.com/repos/allcoolthingsatoneplace/UnrealPakTool',
-    findMod: (api: types.IExtensionApi) => findModByFile(api, MOD_TYPE_UNREAL_PAK_TOOL, UE_PAK_TOOL_FILES[0]),
-    findDownloadId: (api: types.IExtensionApi) => findDownloadIdByFile(api, UE_PAK_TOOL_FILENAME),
+    fileArchivePattern: new RegExp(/^UnrealPakTool.*\.zip$/, 'i'),
   },
 ]
+
+export function getRequirement(attributeId: string): IPluginRequirement {
+  return PLUGIN_REQUIREMENTS.find(req => req.attributeId === attributeId);
+}

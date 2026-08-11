@@ -1,5 +1,5 @@
 import { types, util } from 'vortex-api';
-import { setPalworldMigrationVersion } from './actions';
+import { setAutoManageRequirements, setPalworldMigrationVersion, setRequirementsUpdateChecked } from './actions';
 
 export const settingsReducer: types.IReducerSpec = {
   reducers: {
@@ -9,4 +9,17 @@ export const settingsReducer: types.IReducerSpec = {
     },
   },
   defaults: {},
+};
+
+export const requirementsReducer: types.IReducerSpec = {
+  reducers: {
+    [setAutoManageRequirements as any]: (state, payload) =>
+      ({ ...state, autoManage: payload.enabled }),
+    [setRequirementsUpdateChecked as any]: (state, payload) =>
+      ({ ...state, lastUpdateCheck: payload.timestamp }),
+  },
+  defaults: {
+    autoManage: true,
+    lastUpdateCheck: 0,
+  },
 };

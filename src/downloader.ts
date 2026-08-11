@@ -1,238 +1,214 @@
 /* eslint-disable */
 
 import path from 'path';
-import semver from 'semver';
 import { actions, fs, log, selectors, types, util } from 'vortex-api';
 
 import axios from 'axios';
 
-import { GAME_ID, NOTIF_ID_REQUIREMENTS } from './common';
+import { setRequirementsUpdateChecked } from './actions';
+import { GAME_ID, NOTIF_ID_REQUIREMENTS, NOTIF_ID_REQUIREMENTS_DUPLICATES,
+  NOTIF_ID_UE4SS_UPDATE, PLUGIN_REQUIREMENTS } from './common';
+import { isAutoManageEnabled, lastRequirementsUpdateCheck } from './selectors';
 import { IPluginRequirement, IGitHubAsset, IGitHubRelease } from './types';
+import { findRequirementDownload, findRequirementMods, isModEnabled, pickRequirementMod } from './util';
 
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const GITHUB_TIMEOUT_MS = 30000;
 
-export async function download(api: types.IExtensionApi, requirements: IPluginRequirement[], force?: boolean) {
+// Installs missing requirements, and only missing ones. A requirement the user
+//  disabled or removed is never touched again; one satisfied outside Vortex
+//  (see isSatisfiedExternally) is left to the user.
+export async function ensureRequirements(api: types.IExtensionApi): Promise<void> {
+  if (!isAutoManageEnabled(api.getState())) {
+    return;
+  }
+
+  for (const req of PLUGIN_REQUIREMENTS) {
+    try {
+      const candidates = await findRequirementMods(api, req);
+      if (candidates.length > 1) {
+        api.sendNotification({
+          id: NOTIF_ID_REQUIREMENTS_DUPLICATES,
+          type: 'warning',
+          allowSuppress: true,
+          message: `Multiple copies of "${req.userFacingName}" installed - remove the extras`,
+        });
+      }
+      const mod = pickRequirementMod(api, candidates);
+      if (mod !== undefined) {
+        if (req.notifyUpdates && isModEnabled(api, mod.id)) {
+          // Deliberately not awaited: a notification must never hold up activation.
+          maybeNotifyUpdate(api, req, mod)
+            .catch(err => log('warn', 'update check failed', { requirement: req.userFacingName, error: err.message }));
+        }
+        continue;
+      }
+      if (await req.isSatisfiedExternally?.(api) === true) {
+        continue;
+      }
+      await installRequirement(api, req);
+    } catch (err) {
+      log('warn', 'failed to ensure requirement', { requirement: req.userFacingName, error: err.message });
+    }
+  }
+}
+
+async function installRequirement(api: types.IExtensionApi, req: IPluginRequirement): Promise<void> {
   api.sendNotification({
     id: NOTIF_ID_REQUIREMENTS,
     message: 'Installing Palworld Requirements',
     type: 'activity',
     noDismiss: true,
-    allowSuppress: false,
   });
-
-  const batchActions = [];
-  const profileId = selectors.lastActiveProfileForGame(api.getState(), GAME_ID);
   try {
-    for (const req of requirements) {
-      let versionMismatch = false;
-      const asset = await getLatestGithubReleaseAsset(api, req);
-
-      const mod = await req.findMod(api);
-
-      // If mod is already installed and we're not forcing, skip download
-      if (!!mod && force !== true) {
-        const versionMatch = !!req.fileArchivePattern ? req.fileArchivePattern.exec(asset.name) : [asset.name, asset.release.tag_name];
-        const latestVersion = versionMatch?.[1];
-
-        // Only do version checking if we have both a version in the filename and a resolveVersion function
-        if (latestVersion && req.resolveVersion) {
-          const coercedVersion = util.semverCoerce(latestVersion);
-          const version = await req.resolveVersion(api);
-          if (!semver.satisfies(`^${coercedVersion.version}`, version, { includePrerelease: true }) && coercedVersion.version !== version) {
-            versionMismatch = true;
-            batchActions.push(actions.setModEnabled(profileId, mod.id, false));
-          } else {
-            // Version matches, enable and continue
-            batchActions.push(actions.setModEnabled(profileId, mod.id, true));
-            batchActions.push(actions.setModAttributes(GAME_ID, mod.id, {
-              customFileName: req.userFacingName,
-              version: coercedVersion.version,
-              description: 'This is a Palworld modding requirement - leave it enabled.',
-            }));
-            continue;
-          }
-        } else {
-          // No version info in filename, just check if mod exists and skip download
-          batchActions.push(actions.setModEnabled(profileId, mod.id, true));
-          batchActions.push(actions.setModAttributes(GAME_ID, mod.id, {
-            customFileName: req.userFacingName,
-            description: 'This is a Palworld modding requirement - leave it enabled.',
-          }));
-          continue;
-        }
-      }
-      if (req?.modId !== undefined) {
-        await downloadNexus(api, req);
-      } else {
-        const dlId = req.findDownloadId(api);
-        if (!versionMismatch && !force && dlId) {
-          await installDownload(api, dlId, req.userFacingName);
-          continue;
-        }
-        const tempPath = path.join(util.getVortexPath('temp'), asset.name);
-        try {
-          if (force && !!mod) {
-            // We're force downloading - make sure we disable (and remove?) any existing requirement.
-            await removeExistingReq(api, req);
-          }
-          await doDownload(asset.browser_download_url, tempPath);
-          await importAndInstall(api, tempPath, req.userFacingName);
-        } catch (err) {
-          api.showErrorNotification('Failed to download requirements', err, { allowReport: false });
-          return;
-        }
-      }
+    // Prefer an archive we already have over hitting GitHub.
+    const dlId = findRequirementDownload(api, req);
+    if (dlId) {
+      await installDownload(api, dlId, req);
+      return;
     }
+    await downloadAndInstall(api, req);
   } catch (err) {
-    // Fallback here.
-    log('error', 'failed to download requirements', err);
-    return;
+    api.showErrorNotification('Failed to download requirements', err, { allowReport: false });
   } finally {
-    if (batchActions.length > 0) {
-      util.batchDispatch(api.store, batchActions);
-    }
     api.dismissNotification(NOTIF_ID_REQUIREMENTS);
   }
 }
 
-async function installDownload(api: types.IExtensionApi, dlId: string, name: string): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    api.events.emit('start-install-download', dlId, true, (err, modId) => {
-      if (err !== null) {
-        api.showErrorNotification('Failed to install requirement', err, { allowReport: false });
-        return reject(err);
-      }
-
-      const state = api.getState();
-      const profileId = selectors.lastActiveProfileForGame(state, GAME_ID);
-      const batch = [
-        actions.setModAttributes(GAME_ID, modId, {
-          installTime: new Date(),
-          name,
-        }),
-        actions.setModEnabled(profileId, modId, true),
-      ];
-      util.batchDispatch(api.store, batch);
-      return resolve();
-    })
-  })
+async function downloadAndInstall(api: types.IExtensionApi, req: IPluginRequirement): Promise<string> {
+  const asset = await getLatestGithubReleaseAsset(req);
+  if (!asset?.browser_download_url) {
+    throw new util.NotFound(`download for ${req.userFacingName}`);
+  }
+  const tempPath = path.join(util.getVortexPath('temp'), asset.name);
+  await doDownload(asset.browser_download_url, tempPath);
+  return importAndInstall(api, req, tempPath, asset);
 }
 
-async function importAndInstall(api: types.IExtensionApi, filePath: string, name: string) {
-  return new Promise<void>((resolve, reject) => {
-    api.events.emit('import-downloads', [filePath], async (dlIds: string[]) => {
-      const id = dlIds[0];
-      if (id === undefined) {
-        return reject(new util.NotFound(filePath));
-      }
-      const batched = [];
-      batched.push(actions.setDownloadModInfo(id, 'source', 'other'));
-      util.batchDispatch(api.store, batched);
-      try {
-        await installDownload(api, id, name);
-        return resolve();
-      } catch (err) {
-        return reject(err);
-      }
-    });
-  })
+function githubPageUrl(req: IPluginRequirement): string {
+  return req.githubUrl?.replace('api.github.com/repos', 'github.com');
 }
 
-async function removeExistingReq(api: types.IExtensionApi, requirement: IPluginRequirement) {
-  return new Promise<void>(async (resolve, reject) => {
-    const mod = await requirement.findMod(api);
-    if (!mod) {
-      return resolve();
-    }
-    api.events.emit('remove-mods', GAME_ID, [mod.id], (err) => {
-      if (err !== null) {
-        return reject(err);
-      } else {
-        return resolve();
-      }
-    });
-  })
+// Stamps the installed mod's identity. Written once, at install time, so the name,
+//  release link and freshness marker stay what the user installed.
+async function installDownload(api: types.IExtensionApi, dlId: string, req: IPluginRequirement, asset?: IGitHubAsset): Promise<string> {
+  const modId = await util.toPromise<string>(cb =>
+    api.events.emit('start-install-download', dlId, true, cb));
+  const profileId = selectors.lastActiveProfileForGame(api.getState(), GAME_ID);
+  util.batchDispatch(api.store, [
+    actions.setModAttributes(GAME_ID, modId, {
+      installTime: new Date(),
+      customFileName: req.userFacingName,
+      palworldRequirement: req.attributeId,
+      source: 'website',
+      url: asset?.release?.html_url ?? githubPageUrl(req),
+      description: 'Palworld modding requirement, installed automatically. '
+        + 'Vortex leaves it alone if you disable or remove it; automatic management '
+        + 'can be toggled under Settings > Mods.',
+      ...(asset?.updated_at !== undefined ? { palworldRequirementBuildTime: asset.updated_at } : {}),
+    }),
+    actions.setModEnabled(profileId, modId, true),
+  ]);
+  return modId;
 }
 
-async function downloadNexus(api: types.IExtensionApi, requirement: IPluginRequirement) {
-  if (api.ext?.ensureLoggedIn !== undefined) {
-    await api.ext.ensureLoggedIn();
+async function importAndInstall(api: types.IExtensionApi, req: IPluginRequirement, filePath: string, asset?: IGitHubAsset): Promise<string> {
+  // import-downloads reports the imported ids as its only callback argument, so this
+  //  can't go through util.toPromise (which expects an error first).
+  const dlIds = await new Promise<string[]>(resolve =>
+    api.events.emit('import-downloads', [filePath], (ids: string[]) => resolve(ids)));
+  const dlId = dlIds?.[0];
+  if (dlId === undefined) {
+    throw new util.NotFound(filePath);
+  }
+  api.store.dispatch(actions.setDownloadModInfo(dlId, 'source', 'other'));
+  return installDownload(api, dlId, req, asset);
+}
+
+// The Okaetsu release tag is rolling, so freshness is the asset's updated_at compared
+//  against the value stamped at install time.
+async function maybeNotifyUpdate(api: types.IExtensionApi, req: IPluginRequirement, mod: types.IMod): Promise<void> {
+  if (Date.now() - lastRequirementsUpdateCheck(api.getState()) < UPDATE_CHECK_INTERVAL_MS) {
+    return;
+  }
+  api.store.dispatch(setRequirementsUpdateChecked(Date.now()));
+
+  const installedTime = Date.parse(mod.attributes?.['palworldRequirementBuildTime']);
+  if (Number.isNaN(installedTime)) {
+    // Installed from a local archive or by an older version, so there's no baseline.
+    return;
+  }
+  const asset = await getLatestGithubReleaseAsset(req);
+  const latestTime = Date.parse(asset?.updated_at);
+  if (Number.isNaN(latestTime) || latestTime <= installedTime) {
+    return;
+  }
+  api.sendNotification({
+    id: NOTIF_ID_UE4SS_UPDATE,
+    type: 'info',
+    allowSuppress: true,
+    message: `${req.userFacingName} update available`,
+    actions: [
+      {
+        title: 'Update',
+        action: (dismiss) => {
+          dismiss();
+          updateRequirement(api, req, mod)
+            .catch(err => api.showErrorNotification('Failed to update requirement', err, { allowReport: false }));
+        },
+      },
+    ],
+  });
+}
+
+async function updateRequirement(api: types.IExtensionApi, req: IPluginRequirement, oldMod: types.IMod): Promise<void> {
+  const modId = await downloadAndInstall(api, req);
+  if (modId === oldMod.id) {
+    // Vortex replaced the mod in place, so there's no previous build left to retire.
+    return;
+  }
+  // Retire the previous build but leave removing it to the user.
+  const profileId = selectors.lastActiveProfileForGame(api.getState(), GAME_ID);
+  api.store.dispatch(actions.setModEnabled(profileId, oldMod.id, false));
+}
+
+// Returns null on any failure (offline, rate limit, no matching asset); callers decide
+//  whether that's worth telling the user about.
+export async function getLatestGithubReleaseAsset(requirement: IPluginRequirement): Promise<IGitHubAsset | null> {
+  const wantedName = requirement.archiveFileName.toLowerCase();
+  const chooseAsset = (release: IGitHubRelease): IGitHubAsset | undefined => {
+    const assets = release.assets ?? [];
+    const asset = assets.find(iter => iter.name.toLowerCase() === wantedName)
+      ?? (requirement.fileArchivePattern !== undefined
+        ? assets.find(iter => requirement.fileArchivePattern.test(iter.name))
+        : undefined);
+    return asset !== undefined ? { ...asset, release } : undefined;
   }
   try {
-    const modFiles = await api!.ext?.nexusGetModFiles(GAME_ID, requirement!.modId as number);
-
-    const fileTime = (input: any) => Number.parseInt(input.uploaded_time, 10);
-    const file = modFiles
-      .filter(file => requirement.fileFilter !== undefined ? requirement.fileFilter(file.file_name) : true)
-      .filter(file => file.category_id === 1)
-      .sort((lhs, rhs) => fileTime(lhs) - fileTime(rhs))[0];
-
-    if (file === undefined) {
-      throw new util.ProcessCanceled('File not found');
-    }
-
-    const dlInfo = {
-      game: GAME_ID,
-      name: requirement.archiveFileName,
-    };
-
-    const nxmUrl = `nxm://${GAME_ID}/mods/${requirement.modId}/files/${file.file_id}`;
-    const dlId = await util.toPromise<string>(cb =>
-      api.events.emit('start-download', [nxmUrl], dlInfo, undefined, cb, 'never', { allowInstall: false }));
-    const modId = await util.toPromise<string>(cb =>
-      api.events.emit('start-install-download', dlId, { allowAutoEnable: false }, cb));
-    const profileId = selectors.lastActiveProfileForGame(api.getState(), GAME_ID);
-    await actions.setModsEnabled(api, profileId, [modId], true, {
-      allowAutoDeploy: false,
-      installed: true,
-    });
-  } catch (err) {
-    api!.showErrorNotification('Failed to download/install requirement', err);
-    util.opn(requirement?.modUrl || requirement.githubUrl).catch(() => null);
-  }
-}
-
-export async function getLatestGithubReleaseAsset(api: types.IExtensionApi, requirement: IPluginRequirement, preRelease: boolean = true): Promise<IGitHubAsset | null> {
-  const chooseAsset = (release: IGitHubRelease) => {
-    const assets = release.assets;
-    if (!!requirement.fileArchivePattern) {
-      const asset = assets.find(asset => requirement.fileArchivePattern.exec(asset.name));
-      if (asset) {
-        return {
-          ...asset,
-          release,
-        };
-      }
-    } else {
-      // Try to find the asset based on the filename we provided - otherwise we just pick the first asset.
-      const asset = assets.find((asset: any) => asset.name.includes(requirement.archiveFileName)) ?? assets[0];
-      return {
-        ...asset,
-        release,
-      }
-    }
-  }
-  try {
-    const response = await axios.get(`${requirement.githubUrl}/releases`);
-    const resHeaders = response.headers;
-    const callsRemaining = parseInt(util.getSafe(resHeaders, ['x-ratelimit-remaining'], '0'), 10);
-    if ([403, 404].includes(response?.status) && (callsRemaining === 0)) {
-        const resetDate = parseInt(util.getSafe(resHeaders, ['x-ratelimit-reset'], '0'), 10);
-        log('info', 'GitHub rate limit exceeded', { reset_at: (new Date(resetDate)).toString() });
-        return Promise.reject(new util.ProcessCanceled('GitHub rate limit exceeded'));
-    }
+    const response = await axios.get(`${requirement.githubUrl}/releases`, { timeout: GITHUB_TIMEOUT_MS });
+    assertNotRateLimited(response);
     if (response.status === 200) {
-      const releases: IGitHubRelease[] = response.data.filter((release: IGitHubRelease) => preRelease || !release.prerelease);
-      if (releases[0].assets.length > 0) {
-        return chooseAsset(releases[0]);
+      for (const release of response.data as IGitHubRelease[]) {
+        const asset = chooseAsset(release);
+        if (asset !== undefined) {
+          return asset;
+        }
       }
     }
   } catch (error) {
-    api!.showErrorNotification(
-      'Error fetching the latest release url for {{repName}}',
-      error, { allowReport: false, replace: { repName: requirement.archiveFileName } });
+    log('warn', 'failed to fetch latest release', { repo: requirement.githubUrl, error: error.message });
   }
 
   return null;
+}
+
+function assertNotRateLimited(response: { status?: number, headers?: any }): void {
+  const callsRemaining = parseInt(response.headers?.['x-ratelimit-remaining'] ?? '0', 10);
+  if ([403, 404].includes(response?.status) && (callsRemaining === 0)) {
+    const resetDate = parseInt(response.headers?.['x-ratelimit-reset'] ?? '0', 10);
+    log('info', 'GitHub rate limit exceeded', { reset_at: (new Date(resetDate)).toString() });
+    throw new util.ProcessCanceled('GitHub rate limit exceeded');
+  }
 }
 
 export async function doDownload(downloadUrl: string, destination: string): Promise<void> {
@@ -245,12 +221,6 @@ export async function doDownload(downloadUrl: string, destination: string): Prom
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
     },
   });
-  const resHeaders = response.headers;
-  const callsRemaining = parseInt(util.getSafe(resHeaders, ['x-ratelimit-remaining'], '0'), 10);
-  if ([403, 404].includes(response?.status) && (callsRemaining === 0)) {
-    const resetDate = parseInt(util.getSafe(resHeaders, ['x-ratelimit-reset'], '0'), 10);
-    log('info', 'GitHub rate limit exceeded', { reset_at: (new Date(resetDate)).toString() });
-    return Promise.reject(new util.ProcessCanceled('GitHub rate limit exceeded'));
-  }
+  assertNotRateLimited(response);
   await fs.writeFileAsync(destination, Buffer.from(response.data));
 }

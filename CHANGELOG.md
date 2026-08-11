@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.4.0] - 2026-08-10
+
+- UE4SS and the Unreal Pak Tool are no longer forced on users: disabling either is respected, removing one turns automatic management off, and a new setting under Settings > Mods controls whether Vortex manages them at all
+- A UE4SS installation set up manually (e.g. following pwmodding.wiki) is detected and left in place, and Lua/C++ mod registration in mods.txt works against it
+- The UE4SS mod keeps its real identity (name, version data, link to the Okaetsu RE-UE4SS release) instead of being renamed on every activation
+- UE4SS updates are notify-only: a notification appears when a newer Okaetsu build is published and nothing is ever replaced automatically
+- The downloader selects the UE4SS-Palworld.zip release asset exactly, never the _zDev development build
+- Fixed the Unreal Pak Tool being installed as a C++ mod, which left its executable where pak inspection could not find it and silently disabled Blueprint mod detection
+
 ## [0.3.0] - 2026-07-22
 
 - Added support for UE4SS C++ mods (which are deployed to the same location as Lua mods)

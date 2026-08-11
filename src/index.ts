@@ -7,10 +7,14 @@ import { fs, log, types, selectors, util } from 'vortex-api';
 import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
   PAK_MODSFOLDER_PATH, STEAMAPP_ID, XBOX_EXECUTABLE, XBOX_ID,
   PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA, MOD_TYPE_BP_PAK,
-  BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, IGNORE_DEPLOY, MOD_TYPE_LUA_V2, MOD_TYPE_CPP
+  BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, IGNORE_DEPLOY, MOD_TYPE_LUA_V2, MOD_TYPE_CPP,
+  NOTIF_ID_REQUIREMENTS_OPTOUT
 } from './common';
 
-import { settingsReducer } from './reducers';
+import { setAutoManageRequirements } from './actions';
+import { requirementsReducer, settingsReducer } from './reducers';
+import { IRemoveModOptions } from './types';
+import Settings from './views/Settings';
 
 import { getStopPatterns } from './stopPatterns';
 import {
@@ -22,8 +26,9 @@ import { installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRo
 
 import { migrate } from './migrations';
 
-import { dismissNotifications, resolveUE4SSPath } from './util';
-import { download } from './downloader';
+import { dismissNotifications, matchesRequirement, resolveUE4SSPath } from './util';
+import { ensureRequirements } from './downloader';
+import { isAutoManageEnabled } from './selectors';
 
 import { onAddMod, onRemoveMod } from './modsFile';
 
@@ -63,6 +68,10 @@ function getExecutable(discoveryPath) {
 
 function main(context: types.IExtensionContext) {
   context.registerReducer(['settings', 'palworld', 'migrations'], settingsReducer);
+  context.registerReducer(['settings', 'palworld', 'requirements'], requirementsReducer);
+
+  context.registerSettings('Mods', Settings, undefined,
+    () => selectors.activeGameId(context.api.getState()) === GAME_ID, 51);
   // register a whole game, basic metadata and folder paths
   context.registerGame({
     id: GAME_ID,
@@ -186,7 +195,10 @@ function main(context: types.IExtensionContext) {
 
   context.once(() => {
     context.api.events.on('mods-enabled', async (modIds: string[], enabled: boolean, gameId: string) => onModsEnabled(context.api, modIds, enabled, gameId));
-    context.api.onAsync('will-remove-mods', async (gameId: string, modIds: string[]) => onModsRemoved(context.api, gameId, modIds));
+    context.api.onAsync('will-remove-mods', async (gameId: string, modIds: string[], options?: IRemoveModOptions) => {
+      await onRequirementsRemoved(context.api, gameId, modIds, options);
+      return onModsRemoved(context.api, gameId, modIds);
+    });
     context.api.events.on('gamemode-activated', () => onGameModeActivated(context.api));
     context.api.onAsync('will-deploy', (profileId: string, deployment: types.IDeploymentManifest) => onWillDeployEvent(context.api, profileId, deployment));
     context.api.onAsync('did-deploy', (profileId: string, deployment: types.IDeploymentManifest) => onDidDeployEvent(context.api, profileId, deployment));
@@ -211,7 +223,7 @@ async function setup(api: types.IExtensionApi, discovery: types.IDiscoveryResult
     const oldScriptSystemPath = oldSegments.join(path.sep);
     await Promise.all([path.join(UE4SSPath, 'Mods'), oldScriptSystemPath, PAK_MODSFOLDER_PATH, BPPAK_MODSFOLDER_PATH].map(ensurePath));
     await migrate(api);
-    await download(api, PLUGIN_REQUIREMENTS);
+    await ensureRequirements(api);
   } catch (err) {
     api.showErrorNotification('Failed to setup Palworld extension', err);
     return;
@@ -226,6 +238,31 @@ async function onModsRemoved(api: types.IExtensionApi, gameId: string, modIds: s
     await onRemoveMod(api, modId);
   }
   return;
+}
+
+// Removing a requirement mod turns automatic management off, so it doesn't come back
+//  on the next activation. Disabling is respected per-mod instead (see ensureRequirements).
+//  Only a direct user action counts: Vortex leaves the reason unset for those and sets one
+//  for removals it performs itself (updates, replacements, unmanaging the game).
+async function onRequirementsRemoved(api: types.IExtensionApi, gameId: string, modIds: string[],
+                                     options?: IRemoveModOptions): Promise<void> {
+  const userInitiated = (options?.reason ?? 'user_manual') === 'user_manual'
+    && options?.willBeReplaced !== true;
+  if (gameId !== GAME_ID || !userInitiated || !isAutoManageEnabled(api.getState())) {
+    return;
+  }
+  const mods = api.getState().persistent?.mods?.[GAME_ID] ?? {};
+  const isRequirement = (mod: types.IMod) => (mod !== undefined)
+    && PLUGIN_REQUIREMENTS.some(req => matchesRequirement(mod, req));
+  if (!modIds.some(modId => isRequirement(mods[modId]))) {
+    return;
+  }
+  api.store.dispatch(setAutoManageRequirements(false));
+  api.sendNotification({
+    id: NOTIF_ID_REQUIREMENTS_OPTOUT,
+    type: 'info',
+    message: 'Palworld requirements no longer auto-managed. Re-enable in Settings > Mods.',
+  });
 }
 
 async function onModsInstalled(api: types.IExtensionApi, gameId: string, modIds: string[]): Promise<void> {

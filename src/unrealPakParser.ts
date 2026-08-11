@@ -3,9 +3,9 @@ import * as child_process from 'child_process';
 import * as path from 'path';
 import { log, types, util } from 'vortex-api'
 
-import { MOD_TYPE_BP_PAK, MOD_TYPE_PAK, UE_PAK_TOOL_FILES } from './common';
+import { MOD_TYPE_BP_PAK, MOD_TYPE_PAK } from './common';
 import { IPakExtractionInfo } from './types';
-import { formatBytes, resolveUnrealPakToolPath } from './util';
+import { formatBytes, resolveUnrealPakToolExecutable } from './util';
 
 const DEFAULT_BLUEPRINT_SEGMENT = 'mods';
 const INCREASED_MAX_BUFFER_SIZE = 1024 * 1024 * 10; // 10MB - default is 1MB, max we've come across as needing is 4MB
@@ -78,11 +78,10 @@ function parsePakListLog(logText: string): IPakExtractionInfo | null {
 }
 
 export async function listPak(api: types.IExtensionApi, filePath: string, execOptions?: child_process.ExecOptions): Promise<IPakExtractionInfo | null> {
-  const unrealPakToolToolPath = await resolveUnrealPakToolPath(api);
-  if (!unrealPakToolToolPath) {
+  const execPath = await resolveUnrealPakToolExecutable(api);
+  if (!execPath) {
     return Promise.reject(new util.NotFound('UnrealPakTool'));
   }
-  const execPath = path.join(unrealPakToolToolPath, 'UnrealPakTool', UE_PAK_TOOL_FILES[0]);
   const command = `"${execPath}" "${filePath}" -list`;
   return new Promise<IPakExtractionInfo | null>((resolve, reject) => {
     child_process.exec(command, execOptions, async (error, stdout, stderr) => {
