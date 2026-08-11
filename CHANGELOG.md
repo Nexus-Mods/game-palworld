@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.5.0] - 2026-08-11
+
+- Added support for the PalSchema framework, which is deployed to ue4ss/Mods/PalSchema and registered in mods.txt
+- Added support for PalSchema submodules, which are deployed to ue4ss/Mods/PalSchema/mods. Archives that ship a full game path are handled, and enabled.txt plus a placeholder main.lua are generated when missing
+- PalSchema submodules are detected from all 13 of the data folder names PalSchema supports (previously only 5, so mods using folders such as appearance were installed to the wrong location)
+- PalSchema submodules that ship a PAK in the same archive are now installed as a single mod, with the PAK deployed to Pal/Content/Paks/~mods and the data to the PalSchema mods folder
+- PalSchema submodules deploy to the Win64 or WinGDK folder to match the game store, so archives with a hardcoded path no longer install to the wrong location
+
 ## [0.4.0] - 2026-08-10
 
 - UE4SS and the Unreal Pak Tool are no longer forced on users: disabling either is respected, removing one turns automatic management off, and a new setting under Settings > Mods controls whether Vortex manages them at all

@@ -70,6 +70,21 @@ export const MOD_TYPE_LUA_V2 = 'palworld-lua-modtype-v2';
 export const MOD_TYPE_CPP = 'palworld-cpp-modtype';
 export const MOD_TYPE_BP_PAK = 'palworld-blueprint-modtype';
 export const MOD_TYPE_UNREAL_PAK_TOOL = 'palworld-unreal-pak-tool-modtype';
+export const MOD_TYPE_PALSCHEMA_FRAMEWORK = 'palworld-palschema-framework-modtype';
+export const MOD_TYPE_PALSCHEMA_SUBMODULE = 'palworld-palschema-submodule-modtype';
+
+// The data folders a PalSchema submodule can contain. PalSchema applies different logic
+//  based on the subfolder name, and each of its loaders declares the folder it handles by
+//  passing it to PalModLoaderBase - see src/Loader/Pal*ModLoader.cpp in
+//  https://github.com/Okaetsu/PalSchema. Keep this in sync with that set; a submodule using
+//  only folders absent from this list won't be detected.
+export const PALSCHEMA_SUBMODULE_FOLDERS = [
+  'appearance', 'blueprints', 'buildings', 'enums', 'helpguide', 'items', 'npcs',
+  'pals', 'raw', 'resources', 'skins', 'spawns', 'translations',
+];
+
+// The only file types PalSchema parses; everything else in a mod folder is inert to it.
+export const PALSCHEMA_DATA_EXTENSIONS = ['.json', '.jsonc'];
 
 export type PakModType = 'palworld-pak-modtype' | 'palworld-blueprint-modtype';
 

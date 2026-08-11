@@ -8,6 +8,7 @@ import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
   PAK_MODSFOLDER_PATH, STEAMAPP_ID, XBOX_EXECUTABLE, XBOX_ID,
   PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA, MOD_TYPE_BP_PAK,
   BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, IGNORE_DEPLOY, MOD_TYPE_LUA_V2, MOD_TYPE_CPP,
+  MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE,
   NOTIF_ID_REQUIREMENTS_OPTOUT
 } from './common';
 
@@ -20,9 +21,13 @@ import { getStopPatterns } from './stopPatterns';
 import {
   getBPPakPath, getPakPath, testBPPakPath, testPakPath, testUnrealPakTool,
   getLUAPath, testLUAPath, getLUAPathV2, testLUAPathV2,
-  getCppModPath, testCppModPath
+  getCppModPath, testCppModPath,
+  testPalschemaFrameworkPath, testPalschemaSubmodulePath, getGameRootPath
 } from './modTypes';
-import { installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector, testCppMod, installCppMod } from './installers';
+import {
+  installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector, testCppMod, installCppMod,
+  testPalschemaFramework, installPalschemaFramework, testPalschemaSubmodule, installPalschemaSubmodule
+} from './installers';
 
 import { migrate } from './migrations';
 
@@ -123,6 +128,16 @@ function main(context: types.IExtensionContext) {
   context.registerInstaller('palworld-ue4ss', 10, testUE4SSInjector as any,
     (files, destinationPath, gameId) => installUE4SSInjector(context.api, files, destinationPath, gameId) as any);
 
+  // Both PalSchema installers must run after UE4SS (so a UE4SS archive is never mistaken
+  //  for the framework) but before the lua and cpp installers - otherwise a submodule's
+  //  placeholder main.lua would be claimed as a lua mod, and the framework's dlls/main.dll
+  //  as a cpp mod.
+  context.registerInstaller('palworld-palschema-framework', 12, testPalschemaFramework as any,
+    (files, destinationPath, gameId) => installPalschemaFramework(context.api, files, destinationPath, gameId) as any);
+
+  context.registerInstaller('palworld-palschema-submodule', 14, testPalschemaSubmodule as any,
+    (files, destinationPath, gameId) => installPalschemaSubmodule(context.api, files, destinationPath, gameId) as any);
+
   // Runs after UE4SS to ensure that we don't accidentally install UE4SS as a root mod.
   //  But must run before lua and pak installers to ensure we don't install a root mod
   //  as a lua mod.
@@ -154,6 +169,27 @@ function main(context: types.IExtensionContext) {
     (game: types.IGame) => getBPPakPath(context.api, game),
     (instructions: types.IInstruction[]) => testBPPakPath(context.api, instructions) as any,
     { deploymentEssential: true, name: 'Blueprint Mod' }
+  );
+
+  // Both PalSchema types must take precedence over the lua and cpp types - the framework
+  //  ships a main.dll which would otherwise match the cpp type, and a submodule's
+  //  placeholder main.lua would match the lua type.
+  context.registerModType(
+    MOD_TYPE_PALSCHEMA_FRAMEWORK,
+    6,
+    (gameId) => GAME_ID === gameId,
+    (game: types.IGame) => getLUAPathV2(context.api, game),
+    testPalschemaFrameworkPath as any,
+    { deploymentEssential: true, name: 'PalSchema Framework' }
+  );
+
+  context.registerModType(
+    MOD_TYPE_PALSCHEMA_SUBMODULE,
+    7,
+    (gameId) => GAME_ID === gameId,
+    (game: types.IGame) => getGameRootPath(context.api, game),
+    testPalschemaSubmodulePath as any,
+    { deploymentEssential: true, name: 'PalSchema Submodule' }
   );
 
   context.registerModType(
@@ -273,7 +309,7 @@ async function onModsInstalled(api: types.IExtensionApi, gameId: string, modIds:
   const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
   for (const modId of modIds) {
     const mod = mods[modId];
-    if ([MOD_TYPE_LUA, MOD_TYPE_LUA_V2, MOD_TYPE_CPP].includes(mod?.type)) {
+    if ([MOD_TYPE_LUA, MOD_TYPE_LUA_V2, MOD_TYPE_CPP, MOD_TYPE_PALSCHEMA_FRAMEWORK].includes(mod?.type)) {
       await onAddMod(api, modId);
     } 
   }
@@ -324,7 +360,7 @@ const isLuaMod = (mod: types.IMod) => {
   if (!mod?.type) {
     return false;
   }
-  return [MOD_TYPE_LUA, MOD_TYPE_LUA_V2].includes(mod.type);
+  return [MOD_TYPE_LUA, MOD_TYPE_LUA_V2, MOD_TYPE_PALSCHEMA_FRAMEWORK].includes(mod.type);
 }
 
 const isCppMod = (mod: types.IMod) => {
