@@ -79,7 +79,7 @@ export function getLUAPathV2(api: types.IExtensionApi, game: types.IGame) {
     return '.';
   }
   const ue4ssPath = resolveUE4SSPath(api);
-  const luaPath = path.join(discovery.path, ue4ssPath);
+  const luaPath = path.join(discovery.path, ue4ssPath, 'Mods');
   return luaPath;
 }
 
@@ -132,7 +132,7 @@ export function getCppModPath(api: types.IExtensionApi, game: types.IGame) {
     return '.';
   }
   const ue4ssPath = resolveUE4SSPath(api);
-  const cppPath = path.join(discovery.path, ue4ssPath);
+  const cppPath = path.join(discovery.path, ue4ssPath, 'Mods');
   return cppPath;
 }
 
@@ -221,13 +221,13 @@ export function testPalschemaFrameworkPath(instructions: types.IInstruction[]): 
   if (hasModTypeInstruction(instructions)) {
     return Promise.resolve(false);
   }
-  // Must match the framework root (Mods/PalSchema/...) but NOT a submodule
-  //  (Mods/PalSchema/mods/<name>/...), otherwise submodules get mislabelled
+  // Must match the framework root (PalSchema/...) but NOT a submodule
+  //  (PalSchema/mods/<name>/...), otherwise submodules get mislabelled
   //  as the framework type.
   const supported = instructions.some(inst => {
     if (inst.type !== 'copy') return false;
     const dest = (inst.destination as string).replace(/\\/g, '/').toLowerCase();
-    return dest.startsWith('mods/palschema') && !dest.startsWith('mods/palschema/mods/');
+    return dest.startsWith('palschema') && !dest.startsWith('palschema/mods/');
   });
   return Promise.resolve(supported);
 }

@@ -148,7 +148,7 @@ export async function installPalschemaFramework(api: types.IExtensionApi, files:
     const palschemaIdx = segments.findIndex(seg => seg.toLowerCase() === 'palschema');
     const relSegments = (palschemaIdx !== -1) ? segments.slice(palschemaIdx + 1) : segments;
     const relPath = (relSegments.length > 0) ? relSegments.join(path.sep) : path.basename(iter);
-    const destination = path.join('Mods', 'PalSchema', relPath);
+    const destination = path.join('PalSchema', relPath);
 
     accum.push({
       type: 'copy',
@@ -162,7 +162,7 @@ export async function installPalschemaFramework(api: types.IExtensionApi, files:
     instructions.push({
       type: 'generatefile',
       data: '',
-      destination: path.join('Mods', 'PalSchema', 'enabled.txt'),
+      destination: path.join('PalSchema', 'enabled.txt'),
     });
   }
 
@@ -372,8 +372,7 @@ async function installModInModsFolder(api: types.IExtensionApi, files: string[],
     }
   });
 
-  if (!isExtensionAllowed)
-  {
+  if (!isExtensionAllowed) {
     return Promise.reject('Failed to install mod, extension(s) provided are not allowed in Mods folder');
   }
 
@@ -396,17 +395,19 @@ async function installModInModsFolder(api: types.IExtensionApi, files: string[],
     key: 'palworldFolderId',
     value: folderId,
   }
+
   const instructions = files.reduce((accum, iter) => {
     if (iter.endsWith(path.sep) || path.extname(iter) === '') {
       // No directories
       return accum;
     }
     const fileSegments = iter.split(path.sep);
+    
     const destination = (modsSegmentIdx !== -1)
-      ? path.join(fileSegments.slice(modsSegmentIdx).join(path.sep))
+      ? path.join(fileSegments.slice(modsSegmentIdx + 1).join(path.sep))
       : (fileSegments.length > 1)
-        ? path.join('Mods', folderId, fileSegments.slice(1).join(path.sep))
-        : path.join('Mods', folderId, iter);
+        ? path.join(folderId, fileSegments.slice(1).join(path.sep))
+        : path.join(folderId, iter);
 
     const instruction: types.IInstruction = {
       type: 'copy',
@@ -416,6 +417,7 @@ async function installModInModsFolder(api: types.IExtensionApi, files: string[],
     accum.push(instruction);
     return accum;
   }, [attrInstr]);
+  
   return Promise.resolve({ instructions });
 }
 //#endregion
@@ -423,8 +425,12 @@ async function installModInModsFolder(api: types.IExtensionApi, files: string[],
 //#region LUA
 export async function testLuaMod(files: string[], gameId: string): Promise<types.ISupportedResult> {
   const rightGame = gameId === GAME_ID;
-  const rightFile = files.some(file => LUA_EXTENSIONS.includes(path.extname(file)));
-  const supported = rightGame && rightFile;
+  const normalFiles = files.map(f => f.toLowerCase().replace(/\\/g, '/'));
+  
+  // True UE4SS Lua mods MUST contain a main.lua
+  const isLuaMod = normalFiles.some(f => f.endsWith('main.lua'));
+  const supported = rightGame && isLuaMod;
+  
   return { supported, requiredFiles: [] };
 }
 
@@ -436,12 +442,20 @@ export async function installLuaMod(api: types.IExtensionApi, files: string[], d
 //#region CppMod
 export async function testCppMod(files: string[], gameId: string): Promise<types.ISupportedResult> {
   const rightGame = gameId === GAME_ID;
-  const rightFile = files.some(file => CPPMOD_EXTENSIONS.includes(path.extname(file)));
+  const normalFiles = files.map(f => f.toLowerCase().replace(/\\/g, '/'));
+  
+  // True UE4SS C++ mods MUST contain a main.dll
+  const isCppMod = normalFiles.some(f => f.endsWith('main.dll'));
+  
   // The Unreal Pak Tool ships a bundle of UnrealPak-*.dll files but is not a cpp mod:
   //  it must keep the archive's own layout, which is where listPak looks for the
   //  executable. Deploying it into the ue4ss Mods folder breaks pak inspection.
   const isPakTool = files.some(file => UE_PAK_TOOL_FILES.includes(path.basename(file)));
-  const supported = rightGame && rightFile && !isPakTool;
+  
+  // Prevent PalSchema Framework from being mistakenly identified as a generic C++ mod
+  const hasPalSchemaFolder = normalFiles.some(f => f.includes('palschema'));
+  
+  const supported = rightGame && isCppMod && !isPakTool && !hasPalSchemaFolder;
   return { supported, requiredFiles: [] };
 }
 
