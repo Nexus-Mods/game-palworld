@@ -244,6 +244,15 @@ export function getGameRootPath(api: types.IExtensionApi, game: types.IGame) {
   return discovery.path;
 }
 
+export function getPalschemaSubmoduleDirectPath(api: types.IExtensionApi, game: types.IGame): string {
+  const discovery = selectors.discoveryByGame(api.getState(), game.id);
+  if (!discovery || !discovery.path) {
+    return '.';
+  }
+  const ue4ssPath = resolveUE4SSPath(api);
+  return path.join(discovery.path, ue4ssPath, 'Mods', 'PalSchema', 'mods');
+}
+
 export function testPalschemaSubmodulePath(instructions: types.IInstruction[]): Promise<boolean> {
   if (hasModTypeInstruction(instructions)) {
     return Promise.resolve(false);

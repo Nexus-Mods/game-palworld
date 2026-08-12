@@ -72,6 +72,7 @@ export const MOD_TYPE_BP_PAK = 'palworld-blueprint-modtype';
 export const MOD_TYPE_UNREAL_PAK_TOOL = 'palworld-unreal-pak-tool-modtype';
 export const MOD_TYPE_PALSCHEMA_FRAMEWORK = 'palworld-palschema-framework-modtype';
 export const MOD_TYPE_PALSCHEMA_SUBMODULE = 'palworld-palschema-submodule-modtype';
+export const MOD_TYPE_PALSCHEMA_SUBMODULE_PAK = 'palworld-palschema-submodule-pak-modtype';
 
 // The data folders a PalSchema submodule can contain. PalSchema applies different logic
 //  based on the subfolder name, and each of its loaders declares the folder it handles by

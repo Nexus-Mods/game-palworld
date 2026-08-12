@@ -8,7 +8,8 @@ import { MODS_FILE_BACKUP, GAME_ID, UE4SS_2_5_2_FILES, UE4SS_SETTINGS_FILE,
   CPPMOD_EXTENSIONS, UE_PAK_TOOL_FILES,
   PALSCHEMA_SUBMODULE_FOLDERS, PALSCHEMA_DATA_EXTENSIONS,
   PAK_EXTENSIONS, PAK_MODSFOLDER_PATH,
-  MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE } from './common';
+  MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE, 
+  MOD_TYPE_PALSCHEMA_SUBMODULE_PAK} from './common';
 
 import { getTopLevelPatterns } from './stopPatterns';
 
@@ -284,9 +285,13 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
     modName = path.basename(destinationPath, '.installing');
   }
 
+  // Check if .pak files exist
+  const hasPakFiles = pakFiles.length > 0;
+  const targetModType = hasPakFiles ? MOD_TYPE_PALSCHEMA_SUBMODULE_PAK : MOD_TYPE_PALSCHEMA_SUBMODULE;
+
   const setModInstr: types.IInstruction = {
     type: 'setmodtype',
-    value: MOD_TYPE_PALSCHEMA_SUBMODULE,
+    value: targetModType,
   };
 
   const attrInstr: types.IInstruction = {
@@ -295,21 +300,19 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
     value: modName,
   };
 
-  // Destinations are relative to the game root (see getGameRootPath) because the two halves
-  //  of a hybrid archive land in unrelated places. Resolving the architecture here rather
-  //  than via the modType path means a store change requires a reinstall - acceptable, since
-  //  switching store means a different game install anyway.
-  const submoduleRoot = path.join(UE4SS_PATH_PREFIX, architecture, UE4SS_FOLDER,
-                                  'Mods', 'PalSchema', 'mods', modName);
-
-  let hasEnabledTxt = false;
-  let hasMainLua = false;
+  let submoduleRoot = '';
+  if (hasPakFiles) {
+    // MIXED: Builds the full path from the game root (as before)
+    submoduleRoot = path.join(UE4SS_PATH_PREFIX, architecture, UE4SS_FOLDER,
+                              'Mods', 'PalSchema', 'mods', modName);
+  } else {
+    // PURE: Vortex is already in the PalSchema/mods folder due to the direct mod type
+    submoduleRoot = modName;
+  }
 
   const instructions = schemaFiles.reduce((accum, iter) => {
     const baseName = path.basename(iter).toLowerCase();
-    if (baseName === 'enabled.txt') hasEnabledTxt = true;
-    if (baseName === 'main.lua') hasMainLua = true;
-
+    
     let segments = iter.split(/[\\/]/);
     if (hasMarker) {
       const fileMarkerIdx = findMarker(segments);
@@ -351,22 +354,6 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
       type: 'copy',
       source: iter,
       destination: path.join(PAK_MODSFOLDER_PATH, path.basename(iter)),
-    });
-  }
-
-  if (!hasEnabledTxt) {
-    instructions.push({
-      type: 'generatefile',
-      data: '',
-      destination: path.join(submoduleRoot, 'enabled.txt'),
-    });
-  }
-
-  if (!hasMainLua) {
-    instructions.push({
-      type: 'generatefile',
-      data: '-- PalSchema Submodule Placeholder\r\n',
-      destination: path.join(submoduleRoot, 'main.lua'),
     });
   }
 

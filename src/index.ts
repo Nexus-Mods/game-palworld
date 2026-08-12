@@ -9,7 +9,7 @@ import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
   PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA, MOD_TYPE_BP_PAK,
   BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, IGNORE_DEPLOY, MOD_TYPE_LUA_V2, MOD_TYPE_CPP,
   MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE,
-  NOTIF_ID_REQUIREMENTS_OPTOUT
+  NOTIF_ID_REQUIREMENTS_OPTOUT, MOD_TYPE_PALSCHEMA_SUBMODULE_PAK
 } from './common';
 
 import { setAutoManageRequirements } from './actions';
@@ -22,7 +22,8 @@ import {
   getBPPakPath, getPakPath, testBPPakPath, testPakPath, testUnrealPakTool,
   getLUAPath, testLUAPath, getLUAPathV2, testLUAPathV2,
   getCppModPath, testCppModPath,
-  testPalschemaFrameworkPath, testPalschemaSubmodulePath, getGameRootPath
+  testPalschemaFrameworkPath, testPalschemaSubmodulePath, getGameRootPath,
+  getPalschemaSubmoduleDirectPath
 } from './modTypes';
 import {
   installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector, testCppMod, installCppMod,
@@ -183,13 +184,24 @@ function main(context: types.IExtensionContext) {
     { deploymentEssential: true, name: 'PalSchema Framework' }
   );
 
+  // 1. PURE PalSchema (without .pak)
   context.registerModType(
-    MOD_TYPE_PALSCHEMA_SUBMODULE,
-    7,
-    (gameId) => GAME_ID === gameId,
-    (game: types.IGame) => getGameRootPath(context.api, game),
-    testPalschemaSubmodulePath as any,
+    MOD_TYPE_PALSCHEMA_SUBMODULE, 
+    7, 
+    (gameId) => GAME_ID === gameId, 
+    (game: types.IGame) => getPalschemaSubmoduleDirectPath(context.api, game), 
+    (instructions: types.IInstruction[]) => Promise.resolve(false) as any,
     { deploymentEssential: true, name: 'PalSchema Submodule' }
+  );
+
+  // 2. MIXED PalSchema (with .pak)
+  context.registerModType(
+    MOD_TYPE_PALSCHEMA_SUBMODULE_PAK, 
+    8, 
+    (gameId) => GAME_ID === gameId, 
+    (game: types.IGame) => getGameRootPath(context.api, game), 
+    testPalschemaSubmodulePath, 
+    { deploymentEssential: true, name: 'PalSchema Submodule (+Pak)' }
   );
 
   context.registerModType(
