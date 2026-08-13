@@ -8,8 +8,8 @@ import { DEFAULT_EXECUTABLE, GAME_ID, IGNORE_CONFLICTS,
   PAK_MODSFOLDER_PATH, STEAMAPP_ID, XBOX_EXECUTABLE, XBOX_ID,
   PLUGIN_REQUIREMENTS, MOD_TYPE_PAK, MOD_TYPE_LUA, MOD_TYPE_BP_PAK,
   BPPAK_MODSFOLDER_PATH, MOD_TYPE_UNREAL_PAK_TOOL, IGNORE_DEPLOY, MOD_TYPE_LUA_V2, MOD_TYPE_CPP,
-  MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE,
-  NOTIF_ID_REQUIREMENTS_OPTOUT
+  MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE, NOTIF_ID_REQUIREMENTS_OPTOUT,
+  MOD_TYPE_PALSCHEMA_SUBMODULE_PAK, MOD_TYPE_LUA_PAK
 } from './common';
 
 import { setAutoManageRequirements } from './actions';
@@ -21,12 +21,13 @@ import { getStopPatterns } from './stopPatterns';
 import {
   getBPPakPath, getPakPath, testBPPakPath, testPakPath, testUnrealPakTool,
   getLUAPath, testLUAPath, getLUAPathV2, testLUAPathV2,
-  getCppModPath, testCppModPath,
-  testPalschemaFrameworkPath, testPalschemaSubmodulePath, getGameRootPath
+  getCppModPath, testCppModPath, testLuaPakPath,
+  testPalschemaFrameworkPath, testPalschemaSubmodulePath, getGameRootPath,
+  getPalschemaSubmoduleDirectPath
 } from './modTypes';
 import {
   installLuaMod, installRootMod, installUE4SSInjector, testLuaMod, testRootMod, testUE4SSInjector, testCppMod, installCppMod,
-  testPalschemaFramework, installPalschemaFramework, testPalschemaSubmodule, installPalschemaSubmodule
+  testPalschemaFramework, installPalschemaFramework, testPalschemaSubmodule, installPalschemaSubmodule, testLuaPakMod, installLuaPakMod
 } from './installers';
 
 import { migrate } from './migrations';
@@ -135,8 +136,11 @@ function main(context: types.IExtensionContext) {
   context.registerInstaller('palworld-palschema-framework', 12, testPalschemaFramework as any,
     (files, destinationPath, gameId) => installPalschemaFramework(context.api, files, destinationPath, gameId) as any);
 
-  context.registerInstaller('palworld-palschema-submodule', 14, testPalschemaSubmodule as any,
+  context.registerInstaller('palworld-palschema-submodule', 13, testPalschemaSubmodule as any,
     (files, destinationPath, gameId) => installPalschemaSubmodule(context.api, files, destinationPath, gameId) as any);
+
+  context.registerInstaller('palworld-lua-pak-installer', 14, testLuaPakMod, 
+    (files, destinationPath, gameId) => installLuaPakMod(context.api, files, destinationPath, gameId));
 
   // Runs after UE4SS to ensure that we don't accidentally install UE4SS as a root mod.
   //  But must run before lua and pak installers to ensure we don't install a root mod
@@ -183,13 +187,24 @@ function main(context: types.IExtensionContext) {
     { deploymentEssential: true, name: 'PalSchema Framework' }
   );
 
+  // 1. PURE PalSchema (without .pak)
   context.registerModType(
-    MOD_TYPE_PALSCHEMA_SUBMODULE,
-    7,
-    (gameId) => GAME_ID === gameId,
-    (game: types.IGame) => getGameRootPath(context.api, game),
-    testPalschemaSubmodulePath as any,
+    MOD_TYPE_PALSCHEMA_SUBMODULE, 
+    7, 
+    (gameId) => GAME_ID === gameId, 
+    (game: types.IGame) => getPalschemaSubmoduleDirectPath(context.api, game), 
+    (instructions: types.IInstruction[]) => Promise.resolve(false) as any,
     { deploymentEssential: true, name: 'PalSchema Submodule' }
+  );
+
+  // 2. MIXED PalSchema (with .pak)
+  context.registerModType(
+    MOD_TYPE_PALSCHEMA_SUBMODULE_PAK, 
+    8, 
+    (gameId) => GAME_ID === gameId, 
+    (game: types.IGame) => getGameRootPath(context.api, game), 
+    testPalschemaSubmodulePath, 
+    { deploymentEssential: true, name: 'PalSchema Submodule (+Pak)' }
   );
 
   context.registerModType(
@@ -209,6 +224,14 @@ function main(context: types.IExtensionContext) {
     (game: types.IGame) => getLUAPathV2(context.api, game),
     testLUAPathV2 as any,
     { deploymentEssential: true, name: 'LUA Mod V2' }
+  );
+
+  context.registerModType(
+    MOD_TYPE_LUA_PAK,
+     8,
+    (gameId) => GAME_ID === gameId,
+    (game) => getGameRootPath(context.api, game),
+    testLuaPakPath, { deploymentEssential: true, name: 'LUA + PAK Mod' }
   );
 
   context.registerModType(
@@ -309,7 +332,7 @@ async function onModsInstalled(api: types.IExtensionApi, gameId: string, modIds:
   const mods: { [modId: string]: types.IMod } = util.getSafe(state, ['persistent', 'mods', GAME_ID], {});
   for (const modId of modIds) {
     const mod = mods[modId];
-    if ([MOD_TYPE_LUA, MOD_TYPE_LUA_V2, MOD_TYPE_CPP, MOD_TYPE_PALSCHEMA_FRAMEWORK].includes(mod?.type)) {
+    if ([MOD_TYPE_LUA, MOD_TYPE_LUA_V2, MOD_TYPE_CPP, MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_LUA_PAK].includes(mod?.type)) {
       await onAddMod(api, modId);
     } 
   }
@@ -360,7 +383,7 @@ const isLuaMod = (mod: types.IMod) => {
   if (!mod?.type) {
     return false;
   }
-  return [MOD_TYPE_LUA, MOD_TYPE_LUA_V2, MOD_TYPE_PALSCHEMA_FRAMEWORK].includes(mod.type);
+  return [MOD_TYPE_LUA, MOD_TYPE_LUA_V2, MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_LUA_PAK].includes(mod.type);
 }
 
 const isCppMod = (mod: types.IMod) => {

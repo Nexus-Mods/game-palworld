@@ -79,7 +79,7 @@ export function getLUAPathV2(api: types.IExtensionApi, game: types.IGame) {
     return '.';
   }
   const ue4ssPath = resolveUE4SSPath(api);
-  const luaPath = path.join(discovery.path, ue4ssPath);
+  const luaPath = path.join(discovery.path, ue4ssPath, 'Mods');
   return luaPath;
 }
 
@@ -132,7 +132,7 @@ export function getCppModPath(api: types.IExtensionApi, game: types.IGame) {
     return '.';
   }
   const ue4ssPath = resolveUE4SSPath(api);
-  const cppPath = path.join(discovery.path, ue4ssPath);
+  const cppPath = path.join(discovery.path, ue4ssPath, 'Mods');
   return cppPath;
 }
 
@@ -221,13 +221,13 @@ export function testPalschemaFrameworkPath(instructions: types.IInstruction[]): 
   if (hasModTypeInstruction(instructions)) {
     return Promise.resolve(false);
   }
-  // Must match the framework root (Mods/PalSchema/...) but NOT a submodule
-  //  (Mods/PalSchema/mods/<name>/...), otherwise submodules get mislabelled
+  // Must match the framework root (PalSchema/...) but NOT a submodule
+  //  (PalSchema/mods/<name>/...), otherwise submodules get mislabelled
   //  as the framework type.
   const supported = instructions.some(inst => {
     if (inst.type !== 'copy') return false;
     const dest = (inst.destination as string).replace(/\\/g, '/').toLowerCase();
-    return dest.startsWith('mods/palschema') && !dest.startsWith('mods/palschema/mods/');
+    return dest.startsWith('palschema') && !dest.startsWith('palschema/mods/');
   });
   return Promise.resolve(supported);
 }
@@ -244,6 +244,15 @@ export function getGameRootPath(api: types.IExtensionApi, game: types.IGame) {
   return discovery.path;
 }
 
+export function getPalschemaSubmoduleDirectPath(api: types.IExtensionApi, game: types.IGame): string {
+  const discovery = selectors.discoveryByGame(api.getState(), game.id);
+  if (!discovery || !discovery.path) {
+    return '.';
+  }
+  const ue4ssPath = resolveUE4SSPath(api);
+  return path.join(discovery.path, ue4ssPath, 'Mods', 'PalSchema', 'mods');
+}
+
 export function testPalschemaSubmodulePath(instructions: types.IInstruction[]): Promise<boolean> {
   if (hasModTypeInstruction(instructions)) {
     return Promise.resolve(false);
@@ -251,5 +260,19 @@ export function testPalschemaSubmodulePath(instructions: types.IInstruction[]): 
   const supported = instructions.some(inst => inst.type === 'copy'
     && (inst.destination as string).replace(/\\/g, '/').toLowerCase().includes('ue4ss/mods/palschema/mods/'));
   return Promise.resolve(supported);
+}
+//#endregion
+
+//#region MOD_TYPE_LUA_PAK
+export function testLuaPakPath(instructions: types.IInstruction[]): Promise<boolean> {
+  if (hasModTypeInstruction(instructions)) {
+    return Promise.resolve(false);
+  }
+
+  // A mixed Lua + Pak mod must contain at least one Lua script and one Pak file
+  const hasLua = instructions.some(inst => inst.type === 'copy' && LUA_EXTENSIONS.includes(path.extname(inst.source as string).toLowerCase()));
+  const hasPak = instructions.some(inst => inst.type === 'copy' && PAK_EXTENSIONS.includes(path.extname(inst.source as string).toLowerCase()));
+
+  return Promise.resolve(hasLua && hasPak);
 }
 //#endregion

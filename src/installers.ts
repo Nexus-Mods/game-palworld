@@ -8,7 +8,8 @@ import { MODS_FILE_BACKUP, GAME_ID, UE4SS_2_5_2_FILES, UE4SS_SETTINGS_FILE,
   CPPMOD_EXTENSIONS, UE_PAK_TOOL_FILES,
   PALSCHEMA_SUBMODULE_FOLDERS, PALSCHEMA_DATA_EXTENSIONS,
   PAK_EXTENSIONS, PAK_MODSFOLDER_PATH,
-  MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE } from './common';
+  MOD_TYPE_PALSCHEMA_FRAMEWORK, MOD_TYPE_PALSCHEMA_SUBMODULE, 
+  MOD_TYPE_PALSCHEMA_SUBMODULE_PAK, MOD_TYPE_LUA_PAK} from './common';
 
 import { getTopLevelPatterns } from './stopPatterns';
 
@@ -104,7 +105,7 @@ export async function testPalschemaFramework(files: string[], gameId: string): P
   if (!rightGame) return { supported: false, requiredFiles: [] };
 
   const normalFiles = files.map(f => f.toLowerCase().replace(/\\/g, '/'));
-  const hasDllsMain = normalFiles.some(f => f.endsWith('dlls/main.dll'));
+  const hasDllsMain = normalFiles.some(f => f.includes('dlls/main.'));
   const hasScriptsMain = normalFiles.some(f => f.endsWith('scripts/main.lua'));
   const hasEnabledTxt = files.some(f => path.basename(f).toLowerCase() === 'enabled.txt');
   // A dlls/main.dll alone is NOT a reliable fingerprint: plain C++ mods (e.g.
@@ -147,7 +148,7 @@ export async function installPalschemaFramework(api: types.IExtensionApi, files:
     const palschemaIdx = segments.findIndex(seg => seg.toLowerCase() === 'palschema');
     const relSegments = (palschemaIdx !== -1) ? segments.slice(palschemaIdx + 1) : segments;
     const relPath = (relSegments.length > 0) ? relSegments.join(path.sep) : path.basename(iter);
-    const destination = path.join('Mods', 'PalSchema', relPath);
+    const destination = path.join('PalSchema', relPath);
 
     accum.push({
       type: 'copy',
@@ -161,7 +162,7 @@ export async function installPalschemaFramework(api: types.IExtensionApi, files:
     instructions.push({
       type: 'generatefile',
       data: '',
-      destination: path.join('Mods', 'PalSchema', 'enabled.txt'),
+      destination: path.join('PalSchema', 'enabled.txt'),
     });
   }
 
@@ -284,9 +285,13 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
     modName = path.basename(destinationPath, '.installing');
   }
 
+  // Check if .pak files exist
+  const hasPakFiles = pakFiles.length > 0;
+  const targetModType = hasPakFiles ? MOD_TYPE_PALSCHEMA_SUBMODULE_PAK : MOD_TYPE_PALSCHEMA_SUBMODULE;
+
   const setModInstr: types.IInstruction = {
     type: 'setmodtype',
-    value: MOD_TYPE_PALSCHEMA_SUBMODULE,
+    value: targetModType,
   };
 
   const attrInstr: types.IInstruction = {
@@ -295,21 +300,19 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
     value: modName,
   };
 
-  // Destinations are relative to the game root (see getGameRootPath) because the two halves
-  //  of a hybrid archive land in unrelated places. Resolving the architecture here rather
-  //  than via the modType path means a store change requires a reinstall - acceptable, since
-  //  switching store means a different game install anyway.
-  const submoduleRoot = path.join(UE4SS_PATH_PREFIX, architecture, UE4SS_FOLDER,
-                                  'Mods', 'PalSchema', 'mods', modName);
-
-  let hasEnabledTxt = false;
-  let hasMainLua = false;
+  let submoduleRoot = '';
+  if (hasPakFiles) {
+    // MIXED: Builds the full path from the game root (as before)
+    submoduleRoot = path.join(UE4SS_PATH_PREFIX, architecture, UE4SS_FOLDER,
+                              'Mods', 'PalSchema', 'mods', modName);
+  } else {
+    // PURE: Vortex is already in the PalSchema/mods folder due to the direct mod type
+    submoduleRoot = modName;
+  }
 
   const instructions = schemaFiles.reduce((accum, iter) => {
     const baseName = path.basename(iter).toLowerCase();
-    if (baseName === 'enabled.txt') hasEnabledTxt = true;
-    if (baseName === 'main.lua') hasMainLua = true;
-
+    
     let segments = iter.split(/[\\/]/);
     if (hasMarker) {
       const fileMarkerIdx = findMarker(segments);
@@ -354,23 +357,94 @@ export async function installPalschemaSubmodule(api: types.IExtensionApi, files:
     });
   }
 
-  if (!hasEnabledTxt) {
-    instructions.push({
-      type: 'generatefile',
-      data: '',
-      destination: path.join(submoduleRoot, 'enabled.txt'),
-    });
-  }
-
-  if (!hasMainLua) {
-    instructions.push({
-      type: 'generatefile',
-      data: '-- PalSchema Submodule Placeholder\r\n',
-      destination: path.join(submoduleRoot, 'main.lua'),
-    });
-  }
-
   return { instructions };
+}
+//#endregion
+
+//#region LUA + PAK Mixed Mod
+export async function testLuaPakMod(files: string[], gameId: string): Promise<types.ISupportedResult> {
+  const rightGame = gameId === GAME_ID;
+  const normalFiles = files.map(f => f.toLowerCase().replace(/\\/g, '/'));
+  
+  // Needs both a main.lua AND at least one pak/ucas/utoc file.
+  const hasLua = normalFiles.some(f => f.endsWith('main.lua'));
+  const hasPak = normalFiles.some(f => PAK_EXTENSIONS.some(ext => f.endsWith(ext)));
+  
+  // Strictly exclude PalSchema because PalSchema Submodules have their own mixed pak installer.
+  const isPalSchema = normalFiles.some(f => f.includes('palschema'));
+
+  const supported = rightGame && hasLua && hasPak && !isPalSchema;
+  
+  return { supported, requiredFiles: [] };
+}
+
+export async function installLuaPakMod(api: types.IExtensionApi, files: string[], destinationPath: string, gameId: string): Promise<types.IInstallResult> {
+  const state = api.getState();
+  const discovery = selectors.discoveryByGame(state, gameId);
+  const architecture = discovery?.store === 'xbox' ? 'WinGDK' : 'Win64';
+
+  const validFiles = files.filter(f => !f.endsWith(path.sep) && !f.endsWith('/') && path.extname(f) !== '');
+
+  const isPakFile = (f: string) => PAK_EXTENSIONS.includes(path.extname(f).toLowerCase());
+  
+  // Separate the archive into two halves
+  const pakFiles = validFiles.filter(isPakFile);
+  const luaPartFiles = validFiles.filter(f => !isPakFile(f));
+  
+  const luaFiles = luaPartFiles.filter(file => LUA_EXTENSIONS.includes(path.extname(file).toLowerCase()));
+  luaFiles.sort((a, b) => a.length - b.length);
+  const shortestLua = luaFiles[0] || luaPartFiles[0];
+  const segments = shortestLua.split(path.sep);
+  
+  const modsSegmentIdx = segments.map(seg => !!seg && seg.toLowerCase()).indexOf('mods');
+  const folderId = (modsSegmentIdx !== -1)
+    ? segments[modsSegmentIdx + 1]
+    : (segments.length > 1)
+      ? segments[0]
+      : path.basename(destinationPath, '.installing');
+
+  const setModInstr: types.IInstruction = {
+    type: 'setmodtype',
+    value: MOD_TYPE_LUA_PAK,
+  };
+
+  const attrInstr: types.IInstruction = {
+    type: 'attribute',
+    key: 'palworldFolderId',
+    value: folderId,
+  };
+
+  const luaRoot = path.join(UE4SS_PATH_PREFIX, architecture, UE4SS_FOLDER, 'Mods');
+
+  const instructions = luaPartFiles.reduce((accum, iter) => {
+    const fileSegments = iter.split(path.sep);
+    
+    const relPath = (modsSegmentIdx !== -1)
+      ? path.join(fileSegments.slice(modsSegmentIdx + 1).join(path.sep))
+      : (fileSegments.length > 1)
+        ? path.join(folderId, fileSegments.slice(1).join(path.sep))
+        : path.join(folderId, iter);
+
+    const destination = path.join(luaRoot, relPath);
+
+    accum.push({
+      type: 'copy',
+      source: iter,
+      destination,
+    });
+    return accum;
+  }, [setModInstr, attrInstr]);
+
+  // Direct the Pak files to the Paks/~mods folder, completely ignoring their original archive path
+  for (const iter of pakFiles) {
+    instructions.push({
+      type: 'copy',
+      source: iter,
+      destination: path.join(PAK_MODSFOLDER_PATH, path.basename(iter)),
+    });
+  }
+
+  return Promise.resolve({ instructions });
 }
 //#endregion
 
@@ -385,8 +459,7 @@ async function installModInModsFolder(api: types.IExtensionApi, files: string[],
     }
   });
 
-  if (!isExtensionAllowed)
-  {
+  if (!isExtensionAllowed) {
     return Promise.reject('Failed to install mod, extension(s) provided are not allowed in Mods folder');
   }
 
@@ -409,17 +482,19 @@ async function installModInModsFolder(api: types.IExtensionApi, files: string[],
     key: 'palworldFolderId',
     value: folderId,
   }
+
   const instructions = files.reduce((accum, iter) => {
     if (iter.endsWith(path.sep) || path.extname(iter) === '') {
       // No directories
       return accum;
     }
     const fileSegments = iter.split(path.sep);
+    
     const destination = (modsSegmentIdx !== -1)
-      ? path.join(fileSegments.slice(modsSegmentIdx).join(path.sep))
+      ? path.join(fileSegments.slice(modsSegmentIdx + 1).join(path.sep))
       : (fileSegments.length > 1)
-        ? path.join('Mods', folderId, fileSegments.slice(1).join(path.sep))
-        : path.join('Mods', folderId, iter);
+        ? path.join(folderId, fileSegments.slice(1).join(path.sep))
+        : path.join(folderId, iter);
 
     const instruction: types.IInstruction = {
       type: 'copy',
@@ -429,6 +504,7 @@ async function installModInModsFolder(api: types.IExtensionApi, files: string[],
     accum.push(instruction);
     return accum;
   }, [attrInstr]);
+  
   return Promise.resolve({ instructions });
 }
 //#endregion
@@ -436,8 +512,12 @@ async function installModInModsFolder(api: types.IExtensionApi, files: string[],
 //#region LUA
 export async function testLuaMod(files: string[], gameId: string): Promise<types.ISupportedResult> {
   const rightGame = gameId === GAME_ID;
-  const rightFile = files.some(file => LUA_EXTENSIONS.includes(path.extname(file)));
-  const supported = rightGame && rightFile;
+  const normalFiles = files.map(f => f.toLowerCase().replace(/\\/g, '/'));
+  
+  // True UE4SS Lua mods MUST contain a main.lua
+  const isLuaMod = normalFiles.some(f => f.endsWith('main.lua'));
+  const supported = rightGame && isLuaMod;
+  
   return { supported, requiredFiles: [] };
 }
 
@@ -449,12 +529,19 @@ export async function installLuaMod(api: types.IExtensionApi, files: string[], d
 //#region CppMod
 export async function testCppMod(files: string[], gameId: string): Promise<types.ISupportedResult> {
   const rightGame = gameId === GAME_ID;
-  const rightFile = files.some(file => CPPMOD_EXTENSIONS.includes(path.extname(file)));
+  const normalFiles = files.map(f => f.toLowerCase().replace(/\\/g, '/'));
+  
+  const isCppMod = files.some(file => CPPMOD_EXTENSIONS.includes(path.extname(file).toLowerCase()));
+  
   // The Unreal Pak Tool ships a bundle of UnrealPak-*.dll files but is not a cpp mod:
   //  it must keep the archive's own layout, which is where listPak looks for the
   //  executable. Deploying it into the ue4ss Mods folder breaks pak inspection.
   const isPakTool = files.some(file => UE_PAK_TOOL_FILES.includes(path.basename(file)));
-  const supported = rightGame && rightFile && !isPakTool;
+  
+  // Prevent PalSchema Framework from being mistakenly identified as a generic C++ mod
+  const hasPalSchemaFolder = normalFiles.some(f => f.includes('palschema'));
+  
+  const supported = rightGame && isCppMod && !isPakTool && !hasPalSchemaFolder;
   return { supported, requiredFiles: [] };
 }
 
