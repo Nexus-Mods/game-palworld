@@ -262,3 +262,17 @@ export function testPalschemaSubmodulePath(instructions: types.IInstruction[]): 
   return Promise.resolve(supported);
 }
 //#endregion
+
+//#region MOD_TYPE_LUA_PAK
+export function testLuaPakPath(instructions: types.IInstruction[]): Promise<boolean> {
+  if (hasModTypeInstruction(instructions)) {
+    return Promise.resolve(false);
+  }
+
+  // A mixed Lua + Pak mod must contain at least one Lua script and one Pak file
+  const hasLua = instructions.some(inst => inst.type === 'copy' && LUA_EXTENSIONS.includes(path.extname(inst.source as string).toLowerCase()));
+  const hasPak = instructions.some(inst => inst.type === 'copy' && PAK_EXTENSIONS.includes(path.extname(inst.source as string).toLowerCase()));
+
+  return Promise.resolve(hasLua && hasPak);
+}
+//#endregion
